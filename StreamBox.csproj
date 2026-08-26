@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AssemblyName>StreamBox</AssemblyName>
+    <RootNamespace>StreamBox</RootNamespace>
+
+    <!-- Win32 app manifest (DPI awareness, no console window) -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- Icon embedded into StreamBox.exe (Explorer / .exe / pinned shortcut icon).
+         Made conditional so a plain `dotnet build` before build.bat generates the
+         .ico still succeeds; build.bat always creates it before publish. -->
+    <ApplicationIcon Condition="Exists('Assets\app-icon.ico')">Assets\app-icon.ico</ApplicationIcon>
+
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Single-file publish keeps mpv as an EXTERNAL loose folder (see Content below),
+         because we P/Invoke it from an explicit AppContext.BaseDirectory path.
+         Trimming is intentionally OFF (Avalonia relies on reflection). -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.1.4" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.1.4" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+
+  <!-- App assets embedded as Avalonia resources (logo.png for the idle screen etc.) -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <!-- POST-PUBLISH: Copy the native libmpv folder as LOOSE files next to the exe.
+       Content items get bundled INTO the single-file exe, so we must copy separately.
+       This preserves the mpv\win-x64\ relative path for AppContext.BaseDirectory resolution. -->
+  <Target Name="CopyMpvNative" AfterTargets="Publish">
+    <PropertyGroup>
+      <MpvSource>$(ProjectDir)mpv</MpvSource>
+      <MpvDest>$(PublishDir)mpv</MpvDest>
+    </PropertyGroup>
+    <ItemGroup>
+      <MPVFiles Include="$(MpvSource)\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(MPVFiles)" DestinationFiles="@(MPVFiles->'$(MpvDest)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" Condition="Exists('$(MpvSource)')" />
+  </Target>
+
+  <!-- BUILD-TIME VERIFICATION: fail the publish if no libmpv native DLL made it into
+       the publish output. Runs after CopyMpvNative. -->
+  <Target Name="VerifyMpvNative" AfterTargets="CopyMpvNative">
+    <PropertyGroup>
+      <MpvDir>$(PublishDir)mpv\win-x64\</MpvDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <MpvCandidate Include="$(MpvDir)libmpv-2.dll" />
+      <MpvCandidate Include="$(MpvDir)mpv-2.dll" />
+      <MpvCandidate Include="$(MpvDir)mpv-1.dll" />
+      <MpvFound Include="@(MpvCandidate)" Condition="Exists('%(Identity)')" />
+    </ItemGroup>
+    <Error Condition="'@(MpvFound)' == ''"
+           Text="BUILD FAILED: no libmpv native DLL found in '$(MpvDir)'. Expected one of libmpv-2.dll / mpv-2.dll / mpv-1.dll. Place the 64-bit libmpv build under 'mpv\win-x64\' before publishing." />
+    <Message Condition="'@(MpvFound)' != ''" Importance="high"
+             Text="VerifyMpvNative OK: found @(MpvFound->'%(Filename)%(Extension)')" />
+  </Target>
+
+</Project>

@@ -1,0 +1,155 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:StreamBox.ViewModels"
+        xmlns:m="using:StreamBox.Models"
+        x:Class="StreamBox.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="StreamBox"
+        Width="1200" Height="700"
+        MinWidth="800" MinHeight="500"
+        Icon="/Assets/app-icon.ico"
+        Background="#1a1a2e"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="Full">
+
+    <Grid RowDefinitions="*">
+
+        <!-- ═══ Main Content ═══ -->
+        <Grid ColumnDefinitions="*,300"
+              Name="MainContentGrid">
+
+            <!-- ═══ COL 0: Video Area ═══ -->
+            <Grid Grid.Column="0" Name="VideoAreaGrid" ClipToBounds="True"
+                  Background="#0a0a1a">
+
+                <!-- Idle Overlay (always visible before first channel) -->
+                <StackPanel Name="IdleOverlay" IsVisible="True"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Spacing="12">
+                    <Image Source="/Assets/logo.png" Width="80" Height="80"
+                           Opacity="0.3" />
+                    <TextBlock Text="No channel selected" Foreground="#555"
+                               FontSize="16" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Buffering Overlay (shown during channel switch) -->
+                <StackPanel Name="BufferingOverlay" IsVisible="False"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Spacing="8">
+                    <ProgressBar IsIndeterminate="True" Width="200"
+                                 Foreground="#7c3aed" />
+                    <TextBlock Text="Loading channel..." Foreground="#888"
+                               FontSize="13" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Error Overlay (centered, prominent) -->
+                <StackPanel Name="ErrorOverlay" IsVisible="False"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Spacing="12">
+                    <TextBlock Text="⚠" FontSize="36" Foreground="#e81123"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Name="ErrorTitle" Text="Stream Unavailable"
+                               Foreground="#e0e0e0" FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Name="ErrorText"
+                               Text="This channel is currently unavailable or could not be reached."
+                               Foreground="#888" FontSize="12"
+                               TextWrapping="Wrap" MaxWidth="320"
+                               HorizontalAlignment="Center" TextAlignment="Center" />
+                    <Button Content="↻  Retry" Command="{Binding RetryPlaybackCommand}"
+                            Background="#7c3aed" Foreground="White"
+                            FontSize="13" Padding="16,8" BorderThickness="0"
+                            HorizontalAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <!-- Top Channel Name Strip -->
+                <Border Name="ChannelNameStrip" IsVisible="False"
+                        Background="#88000000" Padding="12,6"
+                        VerticalAlignment="Top" HorizontalAlignment="Left">
+                    <TextBlock Name="ChannelNameText"
+                               Text="{Binding CurrentChannelName}"
+                               Foreground="White" FontSize="13" FontWeight="SemiBold" />
+                </Border>
+
+                <!-- Disable right-click context menu on video surface -->
+                <Border Name="VideoClickBlocker" Background="Transparent"
+                        ContextMenu="{x:Null}" />
+            </Grid>
+
+            <!-- ═══ COL 1: Sidebar ═══ -->
+            <Border Grid.Column="1" Name="SidebarBorder"
+                    Background="#16213e" BorderBrush="#2a2a4a" BorderThickness="1,0,0,0">
+                <Grid RowDefinitions="Auto,Auto,*">
+
+                    <!-- Categories (horizontally scrollable) -->
+                    <ScrollViewer Grid.Row="0"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled"
+                                  MinHeight="36"
+                                  Padding="6,8,6,4"
+                                  ZIndex="10"
+                                  ClipToBounds="True">
+                        <ItemsControl ItemsSource="{Binding Categories}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="4" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="x:String">
+                                    <Button Content="{Binding}"
+                                            Tag="{Binding}"
+                                            Click="CategoryButton_Click"
+                                            Background="#2a2a4a" Foreground="#bbb"
+                                            FontSize="11" Padding="10,4"
+                                            BorderThickness="1" BorderBrush="Transparent"
+                                            Cursor="Hand" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Search Box -->
+                    <Border Grid.Row="1" Padding="6,4">
+                        <TextBox Watermark="Search channels..."
+                                 Text="{Binding SearchText}"
+                                 FontSize="12" Padding="6,4"
+                                 CornerRadius="4"
+                                 Background="#2a2a4a" Foreground="#e0e0e0"
+                                 BorderBrush="#3a3a5a" BorderThickness="1" />
+                    </Border>
+
+                    <!-- Channel List -->
+                    <ListBox Grid.Row="2" Name="ChannelListBox"
+                             ItemsSource="{Binding FilteredChannels}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="ChannelListBox_SelectionChanged"
+                             Padding="4,2">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="m:Channel">
+                                <Border Padding="8,5">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Panel Width="16" Height="16">
+                                        <!-- Fallback placeholder shown when LogoUrl is null -->
+                                        <Image Source="/Assets/logo.png" Opacity="0.3"
+                                               Stretch="Uniform" />
+                                        <!-- Channel logo -->
+                                        <Image Source="{Binding LogoUrl}"
+                                               Stretch="Uniform" />
+                                    </Panel>
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="12" Foreground="#ccc"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
