@@ -12,4 +12,5 @@ public sealed class Channel
     public string? UserAgent { get; set; }
     public Dictionary<string, string>? ExtraHeaders { get; set; }
     public int SortOrder { get; set; }
+    public long PlaylistId { get; set; }
 }

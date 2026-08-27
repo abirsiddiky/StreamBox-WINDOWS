@@ -1,8 +1,11 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using StreamBox.Models;
 using StreamBox.Services;
@@ -27,6 +30,27 @@ public partial class MainWindow : Window
         Opened += OnMainWindowOpened;
         Resized += OnWindowResized;
         Closed += OnMainWindowClosed;
+        KeyDown += OnKeyDown;
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F)
+        {
+            ToggleFullscreen();
+        }
+    }
+
+    private void ToggleFullscreen()
+    {
+        if (WindowState == WindowState.FullScreen)
+        {
+            WindowState = WindowState.Normal;
+        }
+        else
+        {
+            WindowState = WindowState.FullScreen;
+        }
     }
 
     private void OnMainWindowOpened(object? sender, EventArgs e)
@@ -38,7 +62,6 @@ public partial class MainWindow : Window
             _vm.PropertyChanged += OnViewModelPropertyChanged;
             UpdateOverlayVisibility(_vm.PlayerState);
 
-            // Pass HWND factory — HWND created lazily on first channel play
             _vm.PlayerService.SetHostHandleFactory(() =>
             {
                 CreateVideoHwnd();
@@ -94,7 +117,6 @@ public partial class MainWindow : Window
         var bounds = videoGrid.Bounds;
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
-        // Walk up the visual tree to get window-relative coordinates
         var x = bounds.X;
         var y = bounds.Y;
         var visual = (Avalonia.Visual?)videoGrid.Parent;
@@ -151,16 +173,156 @@ public partial class MainWindow : Window
         ErrorOverlay.IsVisible = state == PlayerState.Error;
         ChannelNameStrip.IsVisible = hasChannel && state != PlayerState.Idle;
 
-        // Show/hide the mpv HWND based on playback state.
-        // HWND is created invisible — only shown when mpv is actively playing.
-        // This ensures Avalonia overlays (idle, buffering, error) are always visible
-        // when the HWND is not rendering video.
         if (_videoHwnd != nint.Zero)
         {
             if (state == PlayerState.Playing)
                 ShowWindow(_videoHwnd, SW_SHOW);
             else
                 ShowWindow(_videoHwnd, SW_HIDE);
+        }
+    }
+
+    // ── Playlist Selection ──
+
+    private void PlaylistButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is Playlist playlist && _vm is not null)
+        {
+            _vm.SelectedPlaylist = playlist;
+            UpdatePlaylistActionVisibility(playlist);
+        }
+    }
+
+    private void UpdatePlaylistActionVisibility(Playlist playlist)
+    {
+        // Hide Export and Delete for the built-in/default playlist
+        var isDefault = playlist.SourceKind == "Default";
+        ExportButton.IsVisible = !isDefault;
+        DeleteButton.IsVisible = !isDefault;
+    }
+
+    private void AddPlaylistButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        _vm.AddPlaylistName = string.Empty;
+        _vm.AddPlaylistUrl = string.Empty;
+        _vm.AddPlaylistFromFile = false;
+        AddPlaylistOverlay.IsVisible = true;
+    }
+
+    private void CancelAddPlaylist_Click(object? sender, RoutedEventArgs e)
+    {
+        AddPlaylistOverlay.IsVisible = false;
+    }
+
+    private async void ConfirmAddPlaylist_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        if (string.IsNullOrWhiteSpace(_vm.AddPlaylistName)) return;
+
+        AddPlaylistOverlay.IsVisible = false;
+        await _vm.ConfirmAddPlaylistCommand.ExecuteAsync(null);
+    }
+
+    private void CancelRenamePlaylist_Click(object? sender, RoutedEventArgs e)
+    {
+        RenamePlaylistOverlay.IsVisible = false;
+    }
+
+    private void ConfirmRenamePlaylist_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+        if (string.IsNullOrWhiteSpace(_vm.RenamePlaylistName)) return;
+
+        RenamePlaylistOverlay.IsVisible = false;
+        ((System.Windows.Input.ICommand)_vm.ConfirmRenamePlaylistCommand).Execute(null);
+    }
+
+    // ── Playlist Actions (Refresh / Rename / Export / Remove) ──
+
+    private void PlaylistAction_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || _vm is null) return;
+        if (_vm.SelectedPlaylist is null) return;
+
+        var action = button.Tag as string;
+        switch (action)
+        {
+            case "Refresh":
+                _ = _vm.RefreshPlaylistCommand.ExecuteAsync(_vm.SelectedPlaylist);
+                break;
+
+            case "Rename":
+                _vm.RenamePlaylistName = _vm.SelectedPlaylist.Name;
+                RenamePlaylistOverlay.IsVisible = true;
+                break;
+
+            case "Export":
+                _ = ExportCurrentPlaylistAsync();
+                break;
+
+            case "Remove":
+                _ = _vm.RemovePlaylistCommand.ExecuteAsync(_vm.SelectedPlaylist);
+                break;
+        }
+    }
+
+    private async Task ExportCurrentPlaylistAsync()
+    {
+        if (_vm?.SelectedPlaylist is null) return;
+
+        var playlistName = _vm.SelectedPlaylist.Name;
+        var safeFileName = string.Join("_",
+            playlistName.Split(System.IO.Path.GetInvalidFileNameChars()));
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export Playlist as M3U",
+            SuggestedFileName = $"{safeFileName}.m3u",
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("M3U Playlist Files") { Patterns = new[] { "*.m3u" } },
+                new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } }
+            }
+        });
+
+        if (file is null) return;
+
+        try
+        {
+            var m3uContent = await _vm.ExportPlaylistAsync(_vm.SelectedPlaylist.Id, null);
+            if (m3uContent is not null)
+            {
+                await System.IO.File.WriteAllTextAsync(file.Path.LocalPath, m3uContent);
+                Log.Info($"Playlist exported to: {file.Path.LocalPath}");
+                _vm.StatusMessage = $"Playlist exported to {System.IO.Path.GetFileName(file.Path.LocalPath)}";
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Export failed: {ex.Message}");
+            if (_vm is not null) _vm.StatusMessage = "Export failed";
+        }
+    }
+
+    // ── Add Playlist: Browse File ──
+
+    private async void BrowseFileButton_Click(object? sender, RoutedEventArgs e)
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select M3U Playlist File",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("M3U Playlist Files") { Patterns = new[] { "*.m3u", "*.m3u8", "*.txt" } },
+                new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } }
+            }
+        });
+
+        if (files.Count > 0 && _vm is not null)
+        {
+            _vm.AddPlaylistUrl = files[0].Path.LocalPath;
         }
     }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -13,8 +14,7 @@ namespace StreamBox.Services;
 public sealed class PlaylistService
 {
     private const string DefaultPlaylistUrl = "https://raw.githubusercontent.com/ahan443/FAST-IPTV/refs/heads/main/z.m3u";
-    private const string SourceKindKey = "playlist_source_kind";
-    private const string SourceValueKey = "playlist_source_value";
+    private const string ActivePlaylistIdKey = "active_playlist_id";
 
     private static readonly Regex AttributeRegex = new(@"(?<key>[\w-]+)=""(?<value>[^""]*)""", RegexOptions.Compiled);
 
@@ -27,69 +27,175 @@ public sealed class PlaylistService
         _databaseService = databaseService;
     }
 
-    public Task<IReadOnlyList<Channel>> LoadCachedChannelsAsync(CancellationToken cancellationToken = default)
-        => _databaseService.LoadChannelsAsync(cancellationToken);
+    // ── Playlist CRUD ──
 
-    public async Task<IReadOnlyList<Channel>> RefreshChannelsAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Playlist>> LoadPlaylistsAsync(CancellationToken cancellationToken = default)
+        => _databaseService.LoadPlaylistsAsync(cancellationToken);
+
+    public async Task<long> AddPlaylistAsync(string name, string sourceKind, string? sourceValue, CancellationToken cancellationToken = default)
     {
-        var source = await GetPlaylistSourceAsync(cancellationToken);
-        var m3uText = await ReadPlaylistTextAsync(source, cancellationToken);
-        var channels = ParseM3u(m3uText);
+        var existing = await _databaseService.LoadPlaylistsAsync(cancellationToken);
+        var playlist = new Playlist
+        {
+            Name = name,
+            SourceKind = sourceKind,
+            SourceValue = sourceValue,
+            IsEnabled = true,
+            SortOrder = existing.Count
+        };
+        var id = await _databaseService.InsertPlaylistAsync(playlist, cancellationToken);
+        playlist.Id = id;
+        Log.Info($"Playlist added: '{name}' (id={id}, kind={sourceKind})");
+        return id;
+    }
 
-        await _databaseService.SaveChannelsAsync(channels, cancellationToken);
-        Log.Info($"Playlist refresh completed with {channels.Count} channels");
+    public async Task RemovePlaylistAsync(long playlistId, CancellationToken cancellationToken = default)
+    {
+        await _databaseService.DeletePlaylistAsync(playlistId, cancellationToken);
+        Log.Info($"Playlist deleted (id={playlistId})");
+    }
+
+    public async Task RenamePlaylistAsync(long playlistId, string newName, CancellationToken cancellationToken = default)
+    {
+        var playlists = await _databaseService.LoadPlaylistsAsync(cancellationToken);
+        var playlist = playlists.FirstOrDefault(p => p.Id == playlistId);
+        if (playlist is null) return;
+        playlist.Name = newName;
+        await _databaseService.UpdatePlaylistAsync(playlist, cancellationToken);
+        Log.Info($"Playlist renamed: id={playlistId} -> '{newName}'");
+    }
+
+    // ── Active playlist tracking ──
+
+    public async Task<long?> GetActivePlaylistIdAsync(CancellationToken cancellationToken = default)
+    {
+        var raw = await _databaseService.GetSettingAsync(ActivePlaylistIdKey, cancellationToken);
+        if (long.TryParse(raw, out var id)) return id;
+        return null;
+    }
+
+    public async Task SetActivePlaylistIdAsync(long playlistId, CancellationToken cancellationToken = default)
+    {
+        await _databaseService.SetSettingAsync(ActivePlaylistIdKey, playlistId.ToString(), cancellationToken);
+    }
+
+    // ── Channel operations (playlist-scoped) ──
+
+    public Task<IReadOnlyList<Channel>> LoadCachedChannelsAsync(long playlistId, CancellationToken cancellationToken = default)
+        => _databaseService.LoadPlaylistChannelsAsync(playlistId, cancellationToken);
+
+    public async Task<IReadOnlyList<Channel>> RefreshPlaylistChannelsAsync(long playlistId, CancellationToken cancellationToken = default)
+    {
+        var playlists = await _databaseService.LoadPlaylistsAsync(cancellationToken);
+        var playlist = playlists.FirstOrDefault(p => p.Id == playlistId);
+        if (playlist is null)
+        {
+            Log.Warn($"RefreshPlaylistChannelsAsync: playlist id={playlistId} not found");
+            return Array.Empty<Channel>();
+        }
+
+        var source = ResolveSource(playlist);
+        string m3uText;
+        try
+        {
+            m3uText = await ReadPlaylistTextAsync(source, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to fetch playlist '{playlist.Name}': {ex.Message}");
+            throw;
+        }
+
+        var channels = ParseM3u(m3uText);
+        foreach (var ch in channels)
+        {
+            ch.PlaylistId = playlistId;
+        }
+
+        await _databaseService.SavePlaylistChannelsAsync(playlistId, channels, cancellationToken);
+        Log.Info($"Playlist '{playlist.Name}' refreshed: {channels.Count} channels");
         return channels;
     }
 
-    public async Task<string> GetPlaylistSourceDisplayTextAsync(CancellationToken cancellationToken = default)
+    // ── M3U Export ──
+
+    public async Task<string> ExportPlaylistToM3uAsync(long playlistId, CancellationToken cancellationToken = default)
     {
-        var source = await GetPlaylistSourceAsync(cancellationToken);
-        return source.Kind switch
+        var channels = await _databaseService.LoadPlaylistChannelsAsync(playlistId, cancellationToken);
+        var playlists = await _databaseService.LoadPlaylistsAsync(cancellationToken);
+        var playlist = playlists.FirstOrDefault(p => p.Id == playlistId);
+        var playlistName = playlist?.Name ?? "playlist";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("#EXTM3U");
+        sb.AppendLine($"# Playlists exported from StreamBox");
+        sb.AppendLine($"# Playlist: {playlistName}");
+        sb.AppendLine($"# Exported: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine();
+
+        foreach (var ch in channels)
         {
-            PlaylistSourceKind.Default => "Default playlist",
-            PlaylistSourceKind.CustomUrl => "Custom URL",
-            PlaylistSourceKind.CustomFile => $"File: {Path.GetFileName(source.Value ?? string.Empty)}",
-            _ => "Default playlist"
-        };
-    }
+            // Build #EXTINF line with attributes
+            var attrs = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ch.GroupTitle) && ch.GroupTitle != "Ungrouped")
+            {
+                attrs.Add($"group-title=\"{ch.GroupTitle}\"");
+            }
+            if (!string.IsNullOrWhiteSpace(ch.LogoUrl))
+            {
+                attrs.Add($"tvg-logo=\"{ch.LogoUrl}\"");
+            }
 
-    public async Task SetCustomUrlAsync(string url, CancellationToken cancellationToken = default)
-    {
-        await _databaseService.SetSettingAsync(SourceKindKey, PlaylistSourceKind.CustomUrl.ToString(), cancellationToken);
-        await _databaseService.SetSettingAsync(SourceValueKey, url, cancellationToken);
-        Log.Info("Playlist source set to custom URL");
-    }
+            var attrStr = attrs.Count > 0 ? " " + string.Join(" ", attrs) : "";
+            sb.AppendLine($"#EXTINF:-1{attrStr},{ch.Name}");
 
-    public async Task SetCustomFileAsync(string filePath, CancellationToken cancellationToken = default)
-    {
-        await _databaseService.SetSettingAsync(SourceKindKey, PlaylistSourceKind.CustomFile.ToString(), cancellationToken);
-        await _databaseService.SetSettingAsync(SourceValueKey, filePath, cancellationToken);
-        Log.Info("Playlist source set to custom file");
-    }
+            // Extra headers as EXTVLCOPT
+            if (!string.IsNullOrWhiteSpace(ch.UserAgent))
+            {
+                sb.AppendLine($"#EXTVLCOPT:http-user-agent={ch.UserAgent}");
+            }
+            if (ch.ExtraHeaders is { Count: > 0 })
+            {
+                foreach (var kv in ch.ExtraHeaders)
+                {
+                    // Skip http-user-agent since we handle it above
+                    if (!kv.Key.Equals("http-user-agent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sb.AppendLine($"#EXTVLCOPT:{kv.Key}={kv.Value}");
+                    }
+                }
+            }
 
-    public async Task ResetToDefaultAsync(CancellationToken cancellationToken = default)
-    {
-        await _databaseService.SetSettingAsync(SourceKindKey, PlaylistSourceKind.Default.ToString(), cancellationToken);
-        await _databaseService.DeleteSettingAsync(SourceValueKey, cancellationToken);
-        Log.Info("Playlist source reset to default");
-    }
-
-    private async Task<PlaylistSource> GetPlaylistSourceAsync(CancellationToken cancellationToken)
-    {
-        var kindRaw = await _databaseService.GetSettingAsync(SourceKindKey, cancellationToken);
-        var value = await _databaseService.GetSettingAsync(SourceValueKey, cancellationToken);
-
-        if (!Enum.TryParse<PlaylistSourceKind>(kindRaw, ignoreCase: true, out var kind))
-        {
-            kind = PlaylistSourceKind.Default;
+            sb.AppendLine(ch.StreamUrl);
         }
 
-        return kind switch
+        return sb.ToString();
+    }
+
+    public async Task ExportPlaylistToFileAsync(long playlistId, string filePath, CancellationToken cancellationToken = default)
+    {
+        var m3uContent = await ExportPlaylistToM3uAsync(playlistId, cancellationToken);
+        await File.WriteAllTextAsync(filePath, m3uContent, Encoding.UTF8, cancellationToken);
+        Log.Info($"Playlist exported to: {filePath}");
+    }
+
+    // ── Source resolution ──
+
+    private static PlaylistSource ResolveSource(Playlist playlist)
+    {
+        var kind = playlist.SourceKind switch
         {
-            PlaylistSourceKind.CustomUrl when !string.IsNullOrWhiteSpace(value) => new PlaylistSource(kind, value),
-            PlaylistSourceKind.CustomFile when !string.IsNullOrWhiteSpace(value) => new PlaylistSource(kind, value),
-            _ => new PlaylistSource(PlaylistSourceKind.Default, DefaultPlaylistUrl)
+            "CustomUrl" => PlaylistSourceKind.CustomUrl,
+            "CustomFile" => PlaylistSourceKind.CustomFile,
+            _ => PlaylistSourceKind.Default
         };
+
+        if (kind == PlaylistSourceKind.Default || string.IsNullOrWhiteSpace(playlist.SourceValue))
+        {
+            return new PlaylistSource(PlaylistSourceKind.Default, DefaultPlaylistUrl);
+        }
+
+        return new PlaylistSource(kind, playlist.SourceValue);
     }
 
     private async Task<string> ReadPlaylistTextAsync(PlaylistSource source, CancellationToken cancellationToken)
@@ -110,7 +216,9 @@ public sealed class PlaylistService
         }
     }
 
-    private static List<Channel> ParseM3u(string text)
+    // ── M3U Parser ──
+
+    internal static List<Channel> ParseM3u(string text)
     {
         var lines = text.Replace("\r\n", "\n").Split('\n');
         var channels = new List<Channel>();
@@ -180,8 +288,6 @@ public sealed class PlaylistService
         attributes.TryGetValue("group-title", out var groupTitle);
         attributes.TryGetValue("tvg-logo", out var logoUrl);
 
-        // Sanitize logo URL: strip backticks, HTML entities, surrounding quotes/spaces
-        // M3U playlists often have formats like: tvg-logo="`https://example.com/logo.png`"
         if (logoUrl is not null)
         {
             logoUrl = logoUrl
@@ -192,7 +298,6 @@ public sealed class PlaylistService
                 .Replace("&#39;", "'")
                 .Replace("&quot;", "\"");
 
-            // Validate it looks like a URL (has scheme)
             if (!Uri.TryCreate(logoUrl, UriKind.Absolute, out _))
             {
                 Log.Warn($"Invalid logo URL for channel '{name}': {(logoUrl.Length > 60 ? logoUrl[..60] + "..." : logoUrl)}");

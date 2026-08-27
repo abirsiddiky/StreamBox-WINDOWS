@@ -8,148 +8,424 @@
         Width="1200" Height="700"
         MinWidth="800" MinHeight="500"
         Icon="/Assets/app-icon.ico"
-        Background="#1a1a2e"
+        Background="#1a1a1a"
         WindowStartupLocation="CenterScreen"
         SystemDecorations="Full">
 
+    <Window.Styles>
+        <!-- ═══ Reusable button styles ═══ -->
+
+        <!-- Toolbar icon button (flat, sharp corners) -->
+        <Style Selector="Button.tb">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#808080" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="MinHeight" Value="24" />
+        </Style>
+        <Style Selector="Button.tb:pointerover">
+            <Setter Property="Foreground" Value="#b0b0b0" />
+            <Setter Property="Background" Value="#3a3a3a" />
+        </Style>
+
+        <!-- Playlist tab (flat, sharp) -->
+        <Style Selector="Button.ptab">
+            <Setter Property="Background" Value="#333333" />
+            <Setter Property="Foreground" Value="#a0a0a0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="14,5" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinHeight" Value="26" />
+        </Style>
+        <Style Selector="Button.ptab:pointerover">
+            <Setter Property="Background" Value="#404040" />
+            <Setter Property="Foreground" Value="#d0d0d0" />
+        </Style>
+
+        <!-- Bottom bar action button (sharp, labeled) -->
+        <Style Selector="Button.bar-btn">
+            <Setter Property="Background" Value="#2a2a2a" />
+            <Setter Property="Foreground" Value="#909090" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinHeight" Value="24" />
+        </Style>
+        <Style Selector="Button.bar-btn:pointerover">
+            <Setter Property="Background" Value="#3a3a3a" />
+            <Setter Property="Foreground" Value="#d0d0d0" />
+        </Style>
+
+        <!-- Dialog secondary button -->
+        <Style Selector="Button.dlg-sec">
+            <Setter Property="Background" Value="#333333" />
+            <Setter Property="Foreground" Value="#a0a0a0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="18,7" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.dlg-sec:pointerover">
+            <Setter Property="Background" Value="#444444" />
+            <Setter Property="Foreground" Value="#d0d0d0" />
+        </Style>
+
+        <!-- Dialog primary button -->
+        <Style Selector="Button.dlg-pri">
+            <Setter Property="Background" Value="#3a6ea5" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="18,7" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.dlg-pri:pointerover">
+            <Setter Property="Background" Value="#4a80b5" />
+        </Style>
+
+        <!-- Dialog input -->
+        <Style Selector="TextBox.dinp">
+            <Setter Property="Background" Value="#1a1a1a" />
+            <Setter Property="Foreground" Value="#d0d0d0" />
+            <Setter Property="BorderBrush" Value="#404040" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="TextBox.dinp:focus">
+            <Setter Property="BorderBrush" Value="#3a6ea5" />
+        </Style>
+    </Window.Styles>
+
     <Grid RowDefinitions="*">
+        <Grid ColumnDefinitions="*,330" Name="MainContentGrid">
 
-        <!-- ═══ Main Content ═══ -->
-        <Grid ColumnDefinitions="*,300"
-              Name="MainContentGrid">
-
-            <!-- ═══ COL 0: Video Area ═══ -->
+            <!-- ═══ VIDEO AREA ═══ -->
             <Grid Grid.Column="0" Name="VideoAreaGrid" ClipToBounds="True"
-                  Background="#0a0a1a">
-
-                <!-- Idle Overlay (always visible before first channel) -->
+                  Background="#0a0a0a">
                 <StackPanel Name="IdleOverlay" IsVisible="True"
                             VerticalAlignment="Center" HorizontalAlignment="Center"
                             Spacing="12">
-                    <Image Source="/Assets/logo.png" Width="80" Height="80"
-                           Opacity="0.3" />
-                    <TextBlock Text="No channel selected" Foreground="#555"
-                               FontSize="16" HorizontalAlignment="Center" />
+                    <Image Source="/Assets/logo.png" Width="64" Height="64" Opacity="0.2" />
+                    <TextBlock Text="No channel selected" Foreground="#404040"
+                               FontSize="14" HorizontalAlignment="Center" />
                 </StackPanel>
 
-                <!-- Buffering Overlay (shown during channel switch) -->
                 <StackPanel Name="BufferingOverlay" IsVisible="False"
                             VerticalAlignment="Center" HorizontalAlignment="Center"
                             Spacing="8">
-                    <ProgressBar IsIndeterminate="True" Width="200"
-                                 Foreground="#7c3aed" />
-                    <TextBlock Text="Loading channel..." Foreground="#888"
-                               FontSize="13" HorizontalAlignment="Center" />
+                    <ProgressBar IsIndeterminate="True" Width="160" Height="2"
+                                 Foreground="#3a6ea5" />
+                    <TextBlock Text="Loading..." Foreground="#606060"
+                               FontSize="11" HorizontalAlignment="Center" />
                 </StackPanel>
 
-                <!-- Error Overlay (centered, prominent) -->
                 <StackPanel Name="ErrorOverlay" IsVisible="False"
                             VerticalAlignment="Center" HorizontalAlignment="Center"
-                            Spacing="12">
-                    <TextBlock Text="⚠" FontSize="36" Foreground="#e81123"
+                            Spacing="8">
+                    <TextBlock Text="&#x26A0;" FontSize="32" Foreground="#cc3333"
                                HorizontalAlignment="Center" />
                     <TextBlock Name="ErrorTitle" Text="Stream Unavailable"
-                               Foreground="#e0e0e0" FontSize="18" FontWeight="SemiBold"
+                               Foreground="#c0c0c0" FontSize="14" FontWeight="Normal"
                                HorizontalAlignment="Center" />
                     <TextBlock Name="ErrorText"
                                Text="This channel is currently unavailable or could not be reached."
-                               Foreground="#888" FontSize="12"
-                               TextWrapping="Wrap" MaxWidth="320"
+                               Foreground="#606060" FontSize="11"
+                               TextWrapping="Wrap" MaxWidth="280"
                                HorizontalAlignment="Center" TextAlignment="Center" />
-                    <Button Content="↻  Retry" Command="{Binding RetryPlaybackCommand}"
-                            Background="#7c3aed" Foreground="White"
-                            FontSize="13" Padding="16,8" BorderThickness="0"
-                            HorizontalAlignment="Center" Margin="0,4,0,0" />
+                    <Button Content="Retry" Command="{Binding RetryPlaybackCommand}"
+                            Classes="dlg-pri" FontSize="12" Padding="20,6"
+                            HorizontalAlignment="Center" Margin="0,6,0,0" />
                 </StackPanel>
 
-                <!-- Top Channel Name Strip -->
                 <Border Name="ChannelNameStrip" IsVisible="False"
-                        Background="#88000000" Padding="12,6"
+                        Background="#aa000000" Padding="12,5"
                         VerticalAlignment="Top" HorizontalAlignment="Left">
                     <TextBlock Name="ChannelNameText"
                                Text="{Binding CurrentChannelName}"
-                               Foreground="White" FontSize="13" FontWeight="SemiBold" />
+                               Foreground="White" FontSize="12" FontWeight="Normal" />
                 </Border>
 
-                <!-- Disable right-click context menu on video surface -->
                 <Border Name="VideoClickBlocker" Background="Transparent"
-                        ContextMenu="{x:Null}" />
+                        ContextMenu="{x:Null}" IsHitTestVisible="False" />
             </Grid>
 
-            <!-- ═══ COL 1: Sidebar ═══ -->
+            <!-- ═══ SIDEBAR ═══ -->
             <Border Grid.Column="1" Name="SidebarBorder"
-                    Background="#16213e" BorderBrush="#2a2a4a" BorderThickness="1,0,0,0">
-                <Grid RowDefinitions="Auto,Auto,*">
+                    Background="#2a2a2a" BorderBrush="#3a3a3a" BorderThickness="1,0,0,0">
+                <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
 
-                    <!-- Categories (horizontally scrollable) -->
-                    <ScrollViewer Grid.Row="0"
-                                  HorizontalScrollBarVisibility="Auto"
-                                  VerticalScrollBarVisibility="Disabled"
-                                  MinHeight="36"
-                                  Padding="6,8,6,4"
-                                  ZIndex="10"
-                                  ClipToBounds="True">
-                        <ItemsControl ItemsSource="{Binding Categories}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" Spacing="4" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="x:String">
-                                    <Button Content="{Binding}"
-                                            Tag="{Binding}"
-                                            Click="CategoryButton_Click"
-                                            Background="#2a2a4a" Foreground="#bbb"
-                                            FontSize="11" Padding="10,4"
-                                            BorderThickness="1" BorderBrush="Transparent"
-                                            Cursor="Hand" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-
-                    <!-- Search Box -->
-                    <Border Grid.Row="1" Padding="6,4">
-                        <TextBox Watermark="Search channels..."
-                                 Text="{Binding SearchText}"
-                                 FontSize="12" Padding="6,4"
-                                 CornerRadius="4"
-                                 Background="#2a2a4a" Foreground="#e0e0e0"
-                                 BorderBrush="#3a3a5a" BorderThickness="1" />
+                    <!-- ── TOP TABS: StreamBox ── -->
+                    <Border Grid.Row="0" Background="#252525"
+                            BorderBrush="#3a3a3a" BorderThickness="0,0,0,1">
+                        <Grid ColumnDefinitions="Auto,*,Auto" MinHeight="28">
+                            <Border Grid.Column="0" Background="#252525"
+                                    Padding="14,0" MinWidth="80">
+                                <TextBlock Text="StreamBox"
+                                           Foreground="#a0a0a0" FontSize="11"
+                                           VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
                     </Border>
 
-                    <!-- Channel List -->
-                    <ListBox Grid.Row="2" Name="ChannelListBox"
+                    <!-- ── PLAYLIST SUB-TABS: Default | p1 | + ── -->
+                    <Border Grid.Row="1" Background="#2e2e2e"
+                            BorderBrush="#3a3a3a" BorderThickness="0,0,0,1"
+                            Padding="0,0,0,0">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <ScrollViewer Grid.Column="0"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled">
+                                <StackPanel Orientation="Horizontal">
+                                    <ItemsControl ItemsSource="{Binding Playlists}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="m:Playlist">
+                                                <Button Tag="{Binding}"
+                                                        Click="PlaylistButton_Click"
+                                                        Content="{Binding Name}"
+                                                        Classes="ptab" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                            <Button Grid.Column="1" Content="+"
+                                    Click="AddPlaylistButton_Click"
+                                    Classes="ptab" Padding="10,5"
+                                    FontSize="13" FontWeight="Bold"
+                                    Foreground="#808080" />
+                        </Grid>
+                    </Border>
+
+                    <!-- ── SEARCH ── -->
+                    <Border Grid.Row="2" Padding="4,2,4,3"
+                            Background="#2a2a2a">
+                        <TextBox Watermark="Search..."
+                                 Text="{Binding SearchText}"
+                                 FontSize="11" Padding="6,4"
+                                 CornerRadius="0"
+                                 Background="#1e1e1e" Foreground="#d0d0d0"
+                                 BorderBrush="#3a3a3a" BorderThickness="1" />
+                    </Border>
+
+                    <!-- ── CHANNEL LIST ── -->
+                    <ListBox Grid.Row="3" Name="ChannelListBox"
                              ItemsSource="{Binding FilteredChannels}"
-                             Background="Transparent"
+                             Background="#2a2a2a"
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              SelectionChanged="ChannelListBox_SelectionChanged"
-                             Padding="4,2">
+                             Padding="0,0">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Background" Value="Transparent" />
+                            </Style>
+                            <Style Selector="ListBoxItem /template/ ContentPresenter">
+                                <Setter Property="BorderThickness" Value="0,0,0,0" />
+                            </Style>
+                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="#333333" />
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="#3a6ea5" />
+                            </Style>
+                            <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="#4a80b5" />
+                            </Style>
+                        </ListBox.Styles>
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="m:Channel">
                                 <Border Padding="8,5">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Panel Width="16" Height="16">
-                                        <!-- Fallback placeholder shown when LogoUrl is null -->
-                                        <Image Source="/Assets/logo.png" Opacity="0.3"
-                                               Stretch="Uniform" />
-                                        <!-- Channel logo -->
-                                        <Image Source="{Binding LogoUrl}"
-                                               Stretch="Uniform" />
-                                    </Panel>
-                                    <TextBlock Text="{Binding Name}"
-                                               FontSize="12" Foreground="#ccc"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center" />
-                                </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <!-- Logo icon (small, like PotPlayer's VLC cone) -->
+                                        <Panel Width="16" Height="16">
+                                            <Image Source="/Assets/logo.png" Opacity="0.3"
+                                                   Stretch="Uniform" />
+                                            <Image Source="{Binding LogoUrl}" Stretch="Uniform" />
+                                        </Panel>
+                                        <!-- Channel name -->
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="12" Foreground="#d0d0d0"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <!-- ── BOTTOM BAR: Action buttons + Status ── -->
+                    <Border Grid.Row="4" Background="#252525"
+                            BorderBrush="#3a3a3a" BorderThickness="0,1,0,0">
+                        <Grid RowDefinitions="Auto,Auto">
+                            <!-- Action row: Refresh, Rename, Export, Delete | Channel count -->
+                            <Border Grid.Row="0" Padding="4,2,4,2">
+                                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
+                                    <Button Grid.Column="0" Tag="Refresh"
+                                            Classes="bar-btn"
+                                            Click="PlaylistAction_Click"
+                                            ToolTip.Tip="Refresh from source">
+                                        <TextBlock Text="Refresh" FontSize="10.5" />
+                                    </Button>
+                                    <Button Grid.Column="1" Tag="Rename"
+                                            Classes="bar-btn"
+                                            Click="PlaylistAction_Click"
+                                            ToolTip.Tip="Rename playlist">
+                                        <TextBlock Text="Rename" FontSize="10.5" />
+                                    </Button>
+                                    <Button Grid.Column="2" Tag="Export" Name="ExportButton"
+                                            Classes="bar-btn"
+                                            Click="PlaylistAction_Click"
+                                            ToolTip.Tip="Export as M3U file"
+                                            IsVisible="False">
+                                        <TextBlock Text="Export" FontSize="10.5" />
+                                    </Button>
+                                    <Button Grid.Column="3" Tag="Remove" Name="DeleteButton"
+                                            Classes="bar-btn"
+                                            Click="PlaylistAction_Click"
+                                            ToolTip.Tip="Delete playlist"
+                                            IsVisible="False">
+                                        <TextBlock Text="Delete" FontSize="10.5" />
+                                    </Button>
+                                    <StackPanel Grid.Column="4" Orientation="Horizontal"
+                                                Spacing="6" HorizontalAlignment="Right"
+                                                VerticalAlignment="Center">
+                                        <TextBlock FontSize="10.5" Foreground="#707070"
+                                                   VerticalAlignment="Center">
+                                            <TextBlock.Text>
+                                                <MultiBinding StringFormat="{}{0} channels">
+                                                    <Binding Path="FilteredChannels.Count" />
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
+                                        <ProgressBar IsIndeterminate="True"
+                                                     Width="12" Height="12"
+                                                     Foreground="#3a6ea5"
+                                                     IsVisible="{Binding IsRefreshing}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <!-- Status text -->
+                            <TextBlock Grid.Row="1"
+                                       Text="{Binding StatusMessage}"
+                                       FontSize="10" Foreground="#606060"
+                                       Padding="6,1,6,3"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding StatusMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>
+
+        <!-- ═══ ADD PLAYLIST DIALOG ═══ -->
+        <Border Name="AddPlaylistOverlay" IsVisible="False"
+                Background="#88000000"
+                Grid.Row="0" Grid.ColumnSpan="2"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                ZIndex="100">
+            <Border Background="#2a2a2a" CornerRadius="0"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Width="400" Padding="20"
+                    BorderBrush="#3a3a3a" BorderThickness="1">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Add Playlist" FontSize="14" FontWeight="Normal"
+                               Foreground="#d0d0d0" />
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="Name" FontSize="11" Foreground="#808080" />
+                        <TextBox Watermark="My Playlist"
+                                 Text="{Binding AddPlaylistName}"
+                                 Classes="dinp" />
+                    </StackPanel>
+                    <CheckBox Content="Load from local file"
+                              IsChecked="{Binding AddPlaylistFromFile}"
+                              Foreground="#808080" FontSize="11" />
+                    <StackPanel Spacing="3"
+                                IsVisible="{Binding !AddPlaylistFromFile}">
+                        <TextBlock Text="M3U URL" FontSize="11" Foreground="#808080" />
+                        <TextBox Watermark="https://example.com/playlist.m3u"
+                                 Text="{Binding AddPlaylistUrl}"
+                                 Classes="dinp" />
+                    </StackPanel>
+                    <StackPanel Spacing="3"
+                                IsVisible="{Binding AddPlaylistFromFile}">
+                        <TextBlock Text="File path" FontSize="11" Foreground="#808080" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding AddPlaylistUrl}"
+                                     Classes="dinp" IsReadOnly="True"
+                                     Watermark="No file selected"
+                                     Margin="0,0,4,0" />
+                            <Button Grid.Column="1" Content="Browse..."
+                                    Click="BrowseFileButton_Click"
+                                    Classes="dlg-sec" Padding="10,6" />
+                        </Grid>
+                    </StackPanel>
+                    <Border Height="1" Background="#3a3a3a" />
+                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                HorizontalAlignment="Right">
+                        <Button Content="Cancel" Click="CancelAddPlaylist_Click"
+                                Classes="dlg-sec" />
+                        <Button Content="Add"
+                                Click="ConfirmAddPlaylist_Click"
+                                Classes="dlg-pri" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+
+        <!-- ═══ RENAME PLAYLIST DIALOG ═══ -->
+        <Border Name="RenamePlaylistOverlay" IsVisible="False"
+                Background="#88000000"
+                Grid.Row="0" Grid.ColumnSpan="2"
+                HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                ZIndex="100">
+            <Border Background="#2a2a2a" CornerRadius="0"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Width="360" Padding="20"
+                    BorderBrush="#3a3a3a" BorderThickness="1">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Rename Playlist" FontSize="14" FontWeight="Normal"
+                               Foreground="#d0d0d0" />
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="Name" FontSize="11" Foreground="#808080" />
+                        <TextBox Watermark="Playlist name"
+                                 Text="{Binding RenamePlaylistName}"
+                                 Classes="dinp" />
+                    </StackPanel>
+                    <Border Height="1" Background="#3a3a3a" />
+                    <StackPanel Orientation="Horizontal" Spacing="6"
+                                HorizontalAlignment="Right">
+                        <Button Content="Cancel" Click="CancelRenamePlaylist_Click"
+                                Classes="dlg-sec" />
+                        <Button Content="Rename"
+                                Click="ConfirmRenamePlaylist_Click"
+                                Classes="dlg-pri" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </Window>
