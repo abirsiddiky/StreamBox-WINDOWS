@@ -236,12 +236,15 @@ public sealed class PlayerService : IDisposable
                     var errorCode = e.ErrorCode ?? 0;
 
                     // MpvEndFileReason: 0=Eof, 2=Stop, 3=Quit, 4=Error, 5=Redirect
-                    if (reasonCode == 4) // Error
+                    if (reasonCode == 4) // Error — stream failed to open/play
                     {
                         if (Volatile.Read(ref _mpvGeneration) != Volatile.Read(ref _generation)) return;
-                        Log.Warn($"EndFile with error (code={errorCode}) [gen={mpvGen}] — attempting self-healing");
+                        Log.Warn($"EndFile with error (code={errorCode}) [gen={mpvGen}] — stream unavailable");
                         IsPlaying = false;
-                        SelfHeal();
+                        // Fire Error state so the UI shows "Stream Unavailable".
+                        // Do NOT call SelfHeal here — self-healing is for mpv crashes,
+                        // not for failed streams. The user can retry via the Retry button.
+                        StateChanged?.Invoke(this, new PlayerStateChanged(mpvGen, PlayerState.Error));
                     }
                     else
                     {
