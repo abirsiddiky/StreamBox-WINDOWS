@@ -44,27 +44,39 @@ public partial class MainWindow : Window
     private void ToggleFullscreen()
     {
         var sidebar = this.FindControl<Border>("SidebarBorder");
-        var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
+        var grid = this.FindControl<Grid>("MainContentGrid");
 
-        if (sidebar is null || videoGrid is null) return;
+        if (sidebar is null || grid is null) return;
+
+        // Column 1 is the sidebar column
+        var sidebarColumn = grid.ColumnDefinitions.Count > 1 ? grid.ColumnDefinitions[1] : null;
 
         if (WindowState == WindowState.FullScreen)
         {
-            // Exit fullscreen: restore sidebar
+            // Exit fullscreen: restore sidebar column width
+            if (sidebarColumn is not null)
+            {
+                Log.Info($"[DIAG] ToggleFullscreen EXIT: sidebarColumn.Width before={sidebarColumn.Width}");
+                sidebarColumn.Width = new GridLength(330);
+                Log.Info($"[DIAG] ToggleFullscreen EXIT: sidebarColumn.Width after={sidebarColumn.Width}");
+            }
             sidebar.IsVisible = true;
-            sidebar.Width = 330;
             WindowState = WindowState.Normal;
         }
         else
         {
-            // Enter fullscreen: hide sidebar, video fills entire window
+            // Enter fullscreen: collapse sidebar column to 0
+            if (sidebarColumn is not null)
+            {
+                Log.Info($"[DIAG] ToggleFullscreen ENTER: sidebarColumn.Width before={sidebarColumn.Width}");
+                sidebarColumn.Width = new GridLength(0);
+                Log.Info($"[DIAG] ToggleFullscreen ENTER: sidebarColumn.Width after={sidebarColumn.Width}");
+            }
             sidebar.IsVisible = false;
-            sidebar.Width = 0;
             WindowState = WindowState.FullScreen;
         }
 
-        // Reposition HWND after layout settles — fire at multiple intervals
-        // to catch the layout update regardless of timing
+        // Reposition HWND after layout settles
         void Reposition() => Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
         Reposition();
         Task.Delay(50).ContinueWith(_ => Reposition());
