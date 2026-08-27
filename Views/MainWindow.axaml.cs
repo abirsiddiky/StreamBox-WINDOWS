@@ -125,28 +125,33 @@ public partial class MainWindow : Window
         Log.Info($"Video HWND created: {_videoHwnd}");
     }
 
-    private void RepositionVideoHwnd()
+    private void RepositionVideoHwnd(int retriesLeft = 5)
     {
         if (_videoHwnd == nint.Zero) return;
 
         var parentHwnd = this.TryGetPlatformHandle()?.Handle ?? nint.Zero;
         if (parentHwnd == nint.Zero) return;
 
-        // Use Win32 GetClientRect to get actual physical pixel dimensions
-        // This bypasses all Avalonia logical/physical coordinate issues
         GetClientRect(parentHwnd, out var clientRect);
 
         var sidebar = this.FindControl<Border>("SidebarBorder");
         var sidebarWidth = (sidebar is not null && sidebar.IsVisible) ? (int)(sidebar.Width * this.RenderScaling) : 0;
 
-        var videoX = 0;
-        var videoY = 0;
         var videoW = clientRect.Right - clientRect.Left - sidebarWidth;
         var videoH = clientRect.Bottom - clientRect.Top;
 
-        if (videoW <= 0 || videoH <= 0) return;
+        if (videoW <= 0 || videoH <= 0)
+        {
+            // Window not ready yet — retry after a delay
+            if (retriesLeft > 0)
+            {
+                Task.Delay(100).ContinueWith(_ =>
+                    Dispatcher.UIThread.Post(() => RepositionVideoHwnd(retriesLeft - 1)));
+            }
+            return;
+        }
 
-        MoveWindow(_videoHwnd, videoX, videoY, videoW, videoH, true);
+        MoveWindow(_videoHwnd, 0, 0, videoW, videoH, true);
     }
 
     private void OnWindowResized(object? sender, WindowResizedEventArgs e)
