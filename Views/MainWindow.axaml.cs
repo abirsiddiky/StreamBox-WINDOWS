@@ -75,6 +75,41 @@ public partial class MainWindow : Window
     {
         _vm = DataContext as MainViewModel;
 
+        // Log window dimensions at open time
+        var parentHwnd = this.TryGetPlatformHandle()?.Handle ?? nint.Zero;
+        if (parentHwnd != nint.Zero)
+        {
+            GetWindowRect(parentHwnd, out var winRect);
+            GetClientRect(parentHwnd, out var cliRect);
+            Log.Info($"[DIAG] Window opened — WindowRect: {winRect.Right - winRect.Left}x{winRect.Bottom - winRect.Top}, ClientRect: {cliRect.Right}x{cliRect.Bottom}, RenderScaling: {this.RenderScaling}");
+        }
+
+        // Log VideoAreaGrid bounds after first layout
+        var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
+        if (videoGrid is not null)
+        {
+            Log.Info($"[DIAG] VideoAreaGrid at open — Bounds: {videoGrid.Bounds.Width}x{videoGrid.Bounds.Height}");
+            videoGrid.LayoutUpdated += (_, _) =>
+            {
+                Log.Info($"[DIAG] VideoAreaGrid LayoutUpdated — Bounds: {videoGrid.Bounds.Width}x{videoGrid.Bounds.Height}");
+                RepositionVideoHwnd();
+            };
+            videoGrid.PropertyChanged += (_, args) =>
+            {
+                if (args.Property.Name == "Bounds")
+                {
+                    Log.Info($"[DIAG] VideoAreaGrid Bounds changed — {videoGrid.Bounds.Width}x{videoGrid.Bounds.Height}");
+                }
+            };
+        }
+
+        // Log sidebar dimensions
+        var sidebar = this.FindControl<Border>("SidebarBorder");
+        if (sidebar is not null)
+        {
+            Log.Info($"[DIAG] Sidebar at open — Width: {sidebar.Width}, Bounds: {sidebar.Bounds.Width}, IsVisible: {sidebar.IsVisible}");
+        }
+
         if (_vm is not null)
         {
             _vm.PropertyChanged += OnViewModelPropertyChanged;
@@ -85,13 +120,8 @@ public partial class MainWindow : Window
                 CreateVideoHwnd();
                 if (_videoHwnd != nint.Zero)
                 {
-                    // Hook LayoutUpdated on the video grid — fires after every layout pass
-                    var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
-                    if (videoGrid is not null)
-                    {
-                        videoGrid.LayoutUpdated += (_, _) => RepositionVideoHwnd();
-                    }
-                    // Also schedule initial reposition in case LayoutUpdated already fired
+                    Log.Info($"[DIAG] HWND factory called — _videoHwnd={_videoHwnd}");
+                    // Immediate reposition
                     Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
                 }
                 return _videoHwnd;
@@ -134,12 +164,21 @@ public partial class MainWindow : Window
 
     private void RepositionVideoHwnd()
     {
-        if (_videoHwnd == nint.Zero) return;
+        if (_videoHwnd == nint.Zero)
+        {
+            Log.Info("[DIAG] RepositionVideoHwnd: _videoHwnd is Zero — skipping");
+            return;
+        }
 
         var parentHwnd = this.TryGetPlatformHandle()?.Handle ?? nint.Zero;
-        if (parentHwnd == nint.Zero) return;
+        if (parentHwnd == nint.Zero)
+        {
+            Log.Info("[DIAG] RepositionVideoHwnd: parentHwnd is Zero — skipping");
+            return;
+        }
 
         GetClientRect(parentHwnd, out var clientRect);
+        GetWindowRect(parentHwnd, out var windowRect);
 
         var sidebar = this.FindControl<Border>("SidebarBorder");
         var sidebarWidth = (sidebar is not null && sidebar.IsVisible) ? (int)(sidebar.Width * this.RenderScaling) : 0;
@@ -147,10 +186,20 @@ public partial class MainWindow : Window
         var videoW = clientRect.Right - clientRect.Left - sidebarWidth;
         var videoH = clientRect.Bottom - clientRect.Top;
 
-        if (videoW <= 0 || videoH <= 0) return;
+        Log.Info($"[DIAG] RepositionVideoHwnd: parentHwnd={parentHwnd}, clientRect={clientRect.Right}x{clientRect.Bottom}, windowRect={windowRect.Right - windowRect.Left}x{windowRect.Bottom - windowRect.Top}, sidebar.Width={sidebar?.Width}, sidebar.Visible={sidebar?.IsVisible}, sidebarWidth(scaled)={sidebarWidth}, videoW={videoW}, videoH={videoH}, RenderScaling={this.RenderScaling}");
 
-        Log.Info($"RepositionVideoHwnd: {videoW}x{videoH} (sidebar={sidebarWidth}, client={clientRect.Right}x{clientRect.Bottom})");
+        if (videoW <= 0 || videoH <= 0)
+        {
+            Log.Info("[DIAG] RepositionVideoHwnd: videoW or videoH <= 0 — skipping");
+            return;
+        }
+
         MoveWindow(_videoHwnd, 0, 0, videoW, videoH, true);
+        Log.Info($"[DIAG] RepositionVideoHwnd: MoveWindow called with ({0}, {0}, {videoW}, {videoH})");
+
+        // Verify after move
+        GetWindowRect(_videoHwnd, out var hwndRect);
+        Log.Info($"[DIAG] After MoveWindow: HWND WindowRect = {hwndRect.Right - hwndRect.Left}x{hwndRect.Bottom - hwndRect.Top}");
     }
 
     private void OnWindowResized(object? sender, WindowResizedEventArgs e)
@@ -390,6 +439,9 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern bool GetClientRect(nint hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(nint hWnd, out RECT lpRect);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT
