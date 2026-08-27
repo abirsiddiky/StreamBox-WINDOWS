@@ -129,29 +129,24 @@ public partial class MainWindow : Window
     {
         if (_videoHwnd == nint.Zero) return;
 
-        var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
-        if (videoGrid is null) return;
+        var parentHwnd = this.TryGetPlatformHandle()?.Handle ?? nint.Zero;
+        if (parentHwnd == nint.Zero) return;
 
-        var bounds = videoGrid.Bounds;
-        if (bounds.Width <= 0 || bounds.Height <= 0) return;
+        // Use Win32 GetClientRect to get actual physical pixel dimensions
+        // This bypasses all Avalonia logical/physical coordinate issues
+        GetClientRect(parentHwnd, out var clientRect);
 
-        // Avalonia Bounds are in logical pixels; Win32 needs physical pixels
-        var scale = this.RenderScaling;
+        var sidebar = this.FindControl<Border>("SidebarBorder");
+        var sidebarWidth = (sidebar is not null && sidebar.IsVisible) ? (int)(sidebar.Width * this.RenderScaling) : 0;
 
-        var x = bounds.X;
-        var y = bounds.Y;
-        var visual = (Avalonia.Visual?)videoGrid.Parent;
-        while (visual is not null && visual != this)
-        {
-            x += visual.Bounds.X;
-            y += visual.Bounds.Y;
-            visual = (Avalonia.Visual?)visual.Parent;
-        }
+        var videoX = 0;
+        var videoY = 0;
+        var videoW = clientRect.Right - clientRect.Left - sidebarWidth;
+        var videoH = clientRect.Bottom - clientRect.Top;
 
-        MoveWindow(_videoHwnd,
-            (int)(x * scale), (int)(y * scale),
-            (int)(bounds.Width * scale), (int)(bounds.Height * scale),
-            true);
+        if (videoW <= 0 || videoH <= 0) return;
+
+        MoveWindow(_videoHwnd, videoX, videoY, videoW, videoH, true);
     }
 
     private void OnWindowResized(object? sender, WindowResizedEventArgs e)
@@ -388,4 +383,13 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyWindow(nint hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetClientRect(nint hWnd, out RECT lpRect);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left, Top, Right, Bottom;
+    }
 }
