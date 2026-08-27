@@ -38,6 +38,7 @@ public sealed class MpvClient : IDisposable
         Check(Native.mpv_set_option_string(_handle, "input-default-bindings", "no"), "set input-default-bindings");
         Check(Native.mpv_set_option_string(_handle, "osc", "no"), "set osc");
         Check(Native.mpv_set_option_string(_handle, "keep-open", "no"), "set keep-open");
+        Check(Native.mpv_set_option_string(_handle, "keepaspect", "no"), "set keepaspect");
         Check(Native.mpv_set_option_string(_handle, "idle", "yes"), "set idle");
         Check(Native.mpv_set_option_string(_handle, "network-timeout", "30"), "set network-timeout");
         Check(Native.mpv_set_option_string(_handle, "force-window", "yes"), "set force-window");
