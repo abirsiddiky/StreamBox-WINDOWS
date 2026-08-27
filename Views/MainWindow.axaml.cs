@@ -44,33 +44,21 @@ public partial class MainWindow : Window
     private void ToggleFullscreen()
     {
         var sidebar = this.FindControl<Border>("SidebarBorder");
-        var grid = this.FindControl<Grid>("MainContentGrid");
+
+        if (sidebar is null) return;
 
         if (WindowState == WindowState.FullScreen)
         {
-            // Exit fullscreen: restore sidebar and column layout
-            if (sidebar is not null) sidebar.IsVisible = true;
-            if (grid is not null)
-            {
-                grid.ColumnDefinitions = new ColumnDefinitions
-                {
-                    new ColumnDefinition(new GridLength(1, GridUnitType.Star)),
-                    new ColumnDefinition(new GridLength(330))
-                };
-            }
+            // Exit fullscreen: restore sidebar
+            sidebar.IsVisible = true;
+            sidebar.Width = 330;
             WindowState = WindowState.Normal;
         }
         else
         {
             // Enter fullscreen: hide sidebar, video fills entire window
-            if (sidebar is not null) sidebar.IsVisible = false;
-            if (grid is not null)
-            {
-                grid.ColumnDefinitions = new ColumnDefinitions
-                {
-                    new ColumnDefinition(new GridLength(1, GridUnitType.Star))
-                };
-            }
+            sidebar.IsVisible = false;
+            sidebar.Width = 0;
             WindowState = WindowState.FullScreen;
         }
 
