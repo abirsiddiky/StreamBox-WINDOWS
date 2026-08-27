@@ -50,14 +50,27 @@ public partial class MainWindow : Window
         {
             // Exit fullscreen: restore sidebar and column layout
             if (sidebar is not null) sidebar.IsVisible = true;
-            if (grid is not null) grid.ColumnDefinitions = new ColumnDefinitions("*,330");
+            if (grid is not null)
+            {
+                grid.ColumnDefinitions = new ColumnDefinitions
+                {
+                    new ColumnDefinition(new GridLength(1, GridUnitType.Star)),
+                    new ColumnDefinition(new GridLength(330))
+                };
+            }
             WindowState = WindowState.Normal;
         }
         else
         {
             // Enter fullscreen: hide sidebar, video fills entire window
             if (sidebar is not null) sidebar.IsVisible = false;
-            if (grid is not null) grid.ColumnDefinitions = new ColumnDefinitions("*");
+            if (grid is not null)
+            {
+                grid.ColumnDefinitions = new ColumnDefinitions
+                {
+                    new ColumnDefinition(new GridLength(1, GridUnitType.Star))
+                };
+            }
             WindowState = WindowState.FullScreen;
         }
 
