@@ -85,7 +85,14 @@ public partial class MainWindow : Window
                 CreateVideoHwnd();
                 if (_videoHwnd != nint.Zero)
                 {
-                    Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
+                    // Schedule reposition at increasing delays to ensure window is ready
+                    for (int delay = 0; delay <= 500; delay += 100)
+                    {
+                        int d = delay;
+                        Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
+                        Task.Delay(d).ContinueWith(_ =>
+                            Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded));
+                    }
                 }
                 return _videoHwnd;
             });
