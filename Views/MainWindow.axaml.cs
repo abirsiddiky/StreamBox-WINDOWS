@@ -44,8 +44,9 @@ public partial class MainWindow : Window
     private void ToggleFullscreen()
     {
         var sidebar = this.FindControl<Border>("SidebarBorder");
+        var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
 
-        if (sidebar is null) return;
+        if (sidebar is null || videoGrid is null) return;
 
         if (WindowState == WindowState.FullScreen)
         {
@@ -62,8 +63,12 @@ public partial class MainWindow : Window
             WindowState = WindowState.FullScreen;
         }
 
-        // Reposition HWND after layout change
-        Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
+        // Reposition HWND after layout settles — fire at multiple intervals
+        // to catch the layout update regardless of timing
+        void Reposition() => Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
+        Reposition();
+        Task.Delay(50).ContinueWith(_ => Reposition());
+        Task.Delay(150).ContinueWith(_ => Reposition());
     }
 
     private void OnMainWindowOpened(object? sender, EventArgs e)
