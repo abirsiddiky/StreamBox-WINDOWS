@@ -85,14 +85,14 @@ public partial class MainWindow : Window
                 CreateVideoHwnd();
                 if (_videoHwnd != nint.Zero)
                 {
-                    // Schedule reposition at increasing delays to ensure window is ready
-                    for (int delay = 0; delay <= 500; delay += 100)
+                    // Hook LayoutUpdated on the video grid — fires after every layout pass
+                    var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
+                    if (videoGrid is not null)
                     {
-                        int d = delay;
-                        Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
-                        Task.Delay(d).ContinueWith(_ =>
-                            Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded));
+                        videoGrid.LayoutUpdated += (_, _) => RepositionVideoHwnd();
                     }
+                    // Also schedule initial reposition in case LayoutUpdated already fired
+                    Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
                 }
                 return _videoHwnd;
             });
@@ -132,7 +132,7 @@ public partial class MainWindow : Window
         Log.Info($"Video HWND created: {_videoHwnd}");
     }
 
-    private void RepositionVideoHwnd(int retriesLeft = 5)
+    private void RepositionVideoHwnd()
     {
         if (_videoHwnd == nint.Zero) return;
 
@@ -147,17 +147,9 @@ public partial class MainWindow : Window
         var videoW = clientRect.Right - clientRect.Left - sidebarWidth;
         var videoH = clientRect.Bottom - clientRect.Top;
 
-        if (videoW <= 0 || videoH <= 0)
-        {
-            // Window not ready yet — retry after a delay
-            if (retriesLeft > 0)
-            {
-                Task.Delay(100).ContinueWith(_ =>
-                    Dispatcher.UIThread.Post(() => RepositionVideoHwnd(retriesLeft - 1)));
-            }
-            return;
-        }
+        if (videoW <= 0 || videoH <= 0) return;
 
+        Log.Info($"RepositionVideoHwnd: {videoW}x{videoH} (sidebar={sidebarWidth}, client={clientRect.Right}x{clientRect.Bottom})");
         MoveWindow(_videoHwnd, 0, 0, videoW, videoH, true);
     }
 
