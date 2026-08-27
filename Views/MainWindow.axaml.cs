@@ -135,6 +135,9 @@ public partial class MainWindow : Window
         var bounds = videoGrid.Bounds;
         if (bounds.Width <= 0 || bounds.Height <= 0) return;
 
+        // Avalonia Bounds are in logical pixels; Win32 needs physical pixels
+        var scale = this.RenderScaling;
+
         var x = bounds.X;
         var y = bounds.Y;
         var visual = (Avalonia.Visual?)videoGrid.Parent;
@@ -145,7 +148,10 @@ public partial class MainWindow : Window
             visual = (Avalonia.Visual?)visual.Parent;
         }
 
-        MoveWindow(_videoHwnd, (int)x, (int)y, (int)bounds.Width, (int)bounds.Height, true);
+        MoveWindow(_videoHwnd,
+            (int)(x * scale), (int)(y * scale),
+            (int)(bounds.Width * scale), (int)(bounds.Height * scale),
+            true);
     }
 
     private void OnWindowResized(object? sender, WindowResizedEventArgs e)
