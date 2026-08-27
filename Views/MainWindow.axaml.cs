@@ -170,23 +170,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        var parentHwnd = this.TryGetPlatformHandle()?.Handle ?? nint.Zero;
-        if (parentHwnd == nint.Zero)
+        // Use VideoAreaGrid.Bounds directly — it already accounts for the sidebar
+        var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
+        if (videoGrid is null)
         {
-            Log.Info("[DIAG] RepositionVideoHwnd: parentHwnd is Zero — skipping");
+            Log.Info("[DIAG] RepositionVideoHwnd: videoGrid is null — skipping");
             return;
         }
 
-        GetClientRect(parentHwnd, out var clientRect);
-        GetWindowRect(parentHwnd, out var windowRect);
+        var gridBounds = videoGrid.Bounds;
+        var scale = this.RenderScaling;
+        var videoW = (int)(gridBounds.Width * scale);
+        var videoH = (int)(gridBounds.Height * scale);
 
-        var sidebar = this.FindControl<Border>("SidebarBorder");
-        var sidebarWidth = (sidebar is not null && sidebar.IsVisible) ? (int)(sidebar.Width * this.RenderScaling) : 0;
-
-        var videoW = clientRect.Right - clientRect.Left - sidebarWidth;
-        var videoH = clientRect.Bottom - clientRect.Top;
-
-        Log.Info($"[DIAG] RepositionVideoHwnd: parentHwnd={parentHwnd}, clientRect={clientRect.Right}x{clientRect.Bottom}, windowRect={windowRect.Right - windowRect.Left}x{windowRect.Bottom - windowRect.Top}, sidebar.Width={sidebar?.Width}, sidebar.Visible={sidebar?.IsVisible}, sidebarWidth(scaled)={sidebarWidth}, videoW={videoW}, videoH={videoH}, RenderScaling={this.RenderScaling}");
+        Log.Info($"[DIAG] RepositionVideoHwnd: gridBounds={gridBounds.Width}x{gridBounds.Height}, scale={scale}, videoW={videoW}, videoH={videoH}");
 
         if (videoW <= 0 || videoH <= 0)
         {
@@ -195,7 +192,6 @@ public partial class MainWindow : Window
         }
 
         MoveWindow(_videoHwnd, 0, 0, videoW, videoH, true);
-        Log.Info($"[DIAG] RepositionVideoHwnd: MoveWindow called with ({0}, {0}, {videoW}, {videoH})");
 
         // Verify after move
         GetWindowRect(_videoHwnd, out var hwndRect);
