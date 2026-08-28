@@ -287,12 +287,14 @@ public partial class MainWindow : Window
         _vm.AddPlaylistName = string.Empty;
         _vm.AddPlaylistUrl = string.Empty;
         _vm.AddPlaylistFromFile = false;
+        if (_videoHwnd != nint.Zero) ShowWindow(_videoHwnd, SW_HIDE);
         AddPlaylistOverlay.IsVisible = true;
     }
 
     private void CancelAddPlaylist_Click(object? sender, RoutedEventArgs e)
     {
         AddPlaylistOverlay.IsVisible = false;
+        RestoreHwndIfPlaying();
     }
 
     private async void ConfirmAddPlaylist_Click(object? sender, RoutedEventArgs e)
@@ -302,11 +304,13 @@ public partial class MainWindow : Window
 
         AddPlaylistOverlay.IsVisible = false;
         await _vm.ConfirmAddPlaylistCommand.ExecuteAsync(null);
+        RestoreHwndIfPlaying();
     }
 
     private void CancelRenamePlaylist_Click(object? sender, RoutedEventArgs e)
     {
         RenamePlaylistOverlay.IsVisible = false;
+        RestoreHwndIfPlaying();
     }
 
     private void ConfirmRenamePlaylist_Click(object? sender, RoutedEventArgs e)
@@ -316,6 +320,13 @@ public partial class MainWindow : Window
 
         RenamePlaylistOverlay.IsVisible = false;
         ((System.Windows.Input.ICommand)_vm.ConfirmRenamePlaylistCommand).Execute(null);
+        RestoreHwndIfPlaying();
+    }
+
+    private void RestoreHwndIfPlaying()
+    {
+        if (_videoHwnd != nint.Zero && _vm?.PlayerState == PlayerState.Playing)
+            ShowWindow(_videoHwnd, SW_SHOW);
     }
 
     // ── Playlist Actions (Refresh / Rename / Export / Remove) ──
@@ -333,7 +344,10 @@ public partial class MainWindow : Window
                 break;
 
             case "Rename":
+                _vm.RenamingPlaylistId = _vm.SelectedPlaylist.Id;
                 _vm.RenamePlaylistName = _vm.SelectedPlaylist.Name;
+                // Hide HWND so it doesn't sit on top of the overlay
+                if (_videoHwnd != nint.Zero) ShowWindow(_videoHwnd, SW_HIDE);
                 RenamePlaylistOverlay.IsVisible = true;
                 break;
 

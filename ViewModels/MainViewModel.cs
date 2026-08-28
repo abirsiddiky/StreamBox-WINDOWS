@@ -52,7 +52,12 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty] private bool _isRenamePlaylistOpen;
     [ObservableProperty] private string _renamePlaylistName = string.Empty;
-    private long _renamingPlaylistId;
+    public long RenamingPlaylistId { get; set; }
+    private long _renamingPlaylistId
+    {
+        get => RenamingPlaylistId;
+        set => RenamingPlaylistId = value;
+    }
 
     public PlayerService PlayerService => _playerService;
 
