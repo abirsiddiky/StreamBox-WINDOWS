@@ -254,23 +254,15 @@ public partial class MainWindow : Window
         if (_vm is null) return;
         var selectedId = _vm.SelectedPlaylist?.Id ?? -1;
 
-        // Find all playlist tab buttons in the sidebar and highlight the selected one
-        var sidebar = this.FindControl<Border>("SidebarBorder");
-        if (sidebar is null) return;
-
-        var buttons = sidebar.GetLogicalDescendants().OfType<Button>();
-        foreach (var btn in buttons)
+        // Use Avalonia's public GetVisualDescendants extension to walk the tree
+        foreach (var child in this.GetVisualDescendants())
         {
-            if (btn.Tag is Playlist pl)
+            if (child is Button btn && btn.Tag is Playlist pl)
             {
                 if (pl.Id == selectedId)
-                {
                     btn.Classes.Add("ptab-active");
-                }
                 else
-                {
                     btn.Classes.Remove("ptab-active");
-                }
             }
         }
     }
