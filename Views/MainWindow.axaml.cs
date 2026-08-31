@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using StreamBox.Models;
 using StreamBox.Services;
 using StreamBox.ViewModels;
@@ -254,16 +255,25 @@ public partial class MainWindow : Window
         if (_vm is null) return;
         var selectedId = _vm.SelectedPlaylist?.Id ?? -1;
 
-        // Use Avalonia's public GetVisualDescendants extension to walk the tree
-        foreach (var child in this.GetVisualDescendants())
+        foreach (var child in this.GetVisualChildren())
         {
-            if (child is Button btn && btn.Tag is Playlist pl)
-            {
-                if (pl.Id == selectedId)
-                    btn.Classes.Add("ptab-active");
-                else
-                    btn.Classes.Remove("ptab-active");
-            }
+            HighlightRecursive(child, selectedId);
+        }
+    }
+
+    private static void HighlightRecursive(Avalonia.Visual visual, long selectedId)
+    {
+        if (visual is Button btn && btn.Tag is Playlist pl)
+        {
+            if (pl.Id == selectedId)
+                btn.Classes.Add("ptab-active");
+            else
+                btn.Classes.Remove("ptab-active");
+        }
+
+        foreach (var child in visual.GetVisualChildren())
+        {
+            HighlightRecursive(child, selectedId);
         }
     }
 
