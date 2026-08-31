@@ -147,6 +147,10 @@ public partial class MainWindow : Window
                 else
                     Log.Info("startup complete");
             }, TaskContinuationOptions.OnlyOnRanToCompletion);
+
+            // Highlight selected playlist after UI is ready
+            Task.Delay(500).ContinueWith(_ =>
+                Dispatcher.UIThread.Post(() => HighlightSelectedPlaylist()));
         }
     }
 
@@ -238,6 +242,36 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.PlayerState) && _vm is not null)
         {
             Dispatcher.UIThread.Post(() => UpdateOverlayVisibility(_vm.PlayerState));
+        }
+        if (e.PropertyName == nameof(MainViewModel.SelectedPlaylist))
+        {
+            Dispatcher.UIThread.Post(() => HighlightSelectedPlaylist());
+        }
+    }
+
+    private void HighlightSelectedPlaylist()
+    {
+        if (_vm is null) return;
+        var selectedId = _vm.SelectedPlaylist?.Id ?? -1;
+
+        // Find all playlist tab buttons in the sidebar and highlight the selected one
+        var sidebar = this.FindControl<Border>("SidebarBorder");
+        if (sidebar is null) return;
+
+        var buttons = sidebar.GetLogicalDescendants().OfType<Button>();
+        foreach (var btn in buttons)
+        {
+            if (btn.Tag is Playlist pl)
+            {
+                if (pl.Id == selectedId)
+                {
+                    btn.Classes.Add("ptab-active");
+                }
+                else
+                {
+                    btn.Classes.Remove("ptab-active");
+                }
+            }
         }
     }
 

@@ -47,6 +47,10 @@
             <Setter Property="Background" Value="#404040" />
             <Setter Property="Foreground" Value="#d0d0d0" />
         </Style>
+        <Style Selector="Button.ptab-active">
+            <Setter Property="Background" Value="#3a6ea5" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
 
         <!-- Bottom bar action button (sharp, labeled) -->
         <Style Selector="Button.bar-btn">
@@ -187,7 +191,7 @@
                             Padding="0,0,0,0">
                         <Grid ColumnDefinitions="*,Auto">
                             <ScrollViewer Grid.Column="0"
-                                          HorizontalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Hidden"
                                           VerticalScrollBarVisibility="Disabled">
                                 <StackPanel Orientation="Horizontal">
                                     <ItemsControl ItemsSource="{Binding Playlists}">
