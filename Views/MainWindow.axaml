@@ -190,7 +190,7 @@
                             BorderBrush="#3a3a3a" BorderThickness="0,0,0,1"
                             Padding="0,0,0,0">
                         <Grid ColumnDefinitions="*,Auto">
-                            <ScrollViewer Grid.Column="0"
+                            <ScrollViewer Grid.Column="0" Name="PlaylistScrollViewer"
                                           HorizontalScrollBarVisibility="Hidden"
                                           VerticalScrollBarVisibility="Disabled">
                                 <StackPanel Orientation="Horizontal">

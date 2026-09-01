@@ -341,6 +341,13 @@ public partial class MainWindow : Window
         AddPlaylistOverlay.IsVisible = false;
         await _vm.ConfirmAddPlaylistCommand.ExecuteAsync(null);
         RestoreHwndIfPlaying();
+
+        // Scroll playlist tabs to the end so the new playlist is visible
+        Task.Delay(100).ContinueWith(_ =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                PlaylistScrollViewer.Offset = new Avalonia.Vector(PlaylistScrollViewer.Extent.Width, 0);
+            }));
     }
 
     private void CancelRenamePlaylist_Click(object? sender, RoutedEventArgs e)
