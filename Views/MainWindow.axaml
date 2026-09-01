@@ -192,7 +192,8 @@
                         <Grid ColumnDefinitions="*,Auto">
                             <ScrollViewer Grid.Column="0" Name="PlaylistScrollViewer"
                                           HorizontalScrollBarVisibility="Hidden"
-                                          VerticalScrollBarVisibility="Disabled">
+                                          VerticalScrollBarVisibility="Disabled"
+                                          PointerWheelChanged="PlaylistScrollViewer_PointerWheelChanged">
                                 <StackPanel Orientation="Horizontal">
                                     <ItemsControl ItemsSource="{Binding Playlists}">
                                         <ItemsControl.ItemsPanel>

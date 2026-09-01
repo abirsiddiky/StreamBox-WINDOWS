@@ -343,11 +343,18 @@ public partial class MainWindow : Window
         RestoreHwndIfPlaying();
 
         // Scroll playlist tabs to the end so the new playlist is visible
-        Task.Delay(100).ContinueWith(_ =>
+        // Try multiple times since the UI needs time to lay out new items
+        void ScrollToEnd()
+        {
             Dispatcher.UIThread.Post(() =>
             {
-                PlaylistScrollViewer.Offset = new Avalonia.Vector(PlaylistScrollViewer.Extent.Width, 0);
-            }));
+                PlaylistScrollViewer.Offset = new Avalonia.Vector(
+                    Math.Max(0, PlaylistScrollViewer.Extent.Width - PlaylistScrollViewer.Viewport.Width), 0);
+            });
+        }
+        ScrollToEnd();
+        Task.Delay(200).ContinueWith(_ => ScrollToEnd());
+        Task.Delay(500).ContinueWith(_ => ScrollToEnd());
     }
 
     private void CancelRenamePlaylist_Click(object? sender, RoutedEventArgs e)
@@ -470,6 +477,22 @@ public partial class MainWindow : Window
         if (sender is Button button && button.Tag is string category && _vm is not null)
         {
             _vm.SelectedCategory = category;
+        }
+    }
+
+    // ── Playlist Scroll ──
+
+    private void PlaylistScrollViewer_PointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        // Convert vertical mouse wheel to horizontal scroll
+        if (sender is ScrollViewer sv && e.Delta.Y != 0)
+        {
+            var offset = sv.Offset;
+            offset = new Avalonia.Vector(
+                Math.Max(0, Math.Min(offset.X - e.Delta.X * 40 - e.Delta.Y * 40, sv.Extent.Width - sv.Viewport.Width)),
+                0);
+            sv.Offset = offset;
+            e.Handled = true;
         }
     }
 
