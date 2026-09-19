@@ -235,7 +235,7 @@ Writes to `%LocalAppData%\StreamBox\logs\startup.log`. Log calls enqueue a forma
 ┌──────────────────────────────────────────┐
 │  StreamBox (windows native title bar)    │
 ├──────────────────────────┬───────────────┤
-│                          │ Playlists    │
+│                          │ Playlists     │
 │                          │ (scrollable)  │
 │      Video Area          ├───────────────┤
 │      (mpv HWND)          │ Search        │
