@@ -57,16 +57,20 @@ public partial class App : Application
 
     private static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton(new HttpClient
+        var handler = new HttpClientHandler
         {
-            Timeout = TimeSpan.FromSeconds(30),
-            DefaultRequestHeaders =
-            {
-                { "User-Agent", "StreamBox/1.0 (Windows)" }
-            }
-        });
+            AutomaticDecompression = System.Net.DecompressionMethods.All
+        };
+        var httpClient = new HttpClient(handler)
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        httpClient.DefaultRequestHeaders.Add("User-Agent", "StreamBox/1.0 (Windows)");
+        services.AddSingleton(httpClient);
 
         services.AddSingleton<DatabaseService>();
+        services.AddSingleton<StalkerService>();
+        services.AddSingleton<XtreamClient>();
         services.AddSingleton<PlaylistService>();
         services.AddSingleton<PlayerService>();
         services.AddSingleton<MainViewModel>();

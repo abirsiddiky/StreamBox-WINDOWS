@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -10,10 +11,12 @@ namespace StreamBox.Services;
 /// Ultra-robust static logger. Used from the FIRST line of Main() (before AppBuilder),
 /// so every method swallows its own exceptions and NEVER throws. Writes to
 /// %LocalAppData%\StreamBox\logs\startup.log and mirrors to Debug/Console.
+/// File I/O is batched on a background thread to avoid per-call disk overhead.
 /// </summary>
 public static class Log
 {
-    private static readonly object _gate = new();
+    private static readonly ConcurrentQueue<string> _queue = new();
+    private static readonly object _flushGate = new();
     private static string _logDir = "";
     private static string _logFile = "";
     private static bool _ready;
@@ -47,6 +50,14 @@ public static class Log
             catch { /* rolling is best-effort */ }
 
             _ready = true;
+
+            // Start background flush thread
+            var flusher = new Thread(FlushLoop)
+            {
+                IsBackground = true,
+                Name = "Log.Flusher"
+            };
+            flusher.Start();
         }
         catch
         {
@@ -61,6 +72,13 @@ public static class Log
 
     public static void Error(string message, Exception ex)
         => Write("ERROR", message + Environment.NewLine + ex);
+
+    /// <summary>Synchronously drain any remaining queued lines to disk.
+    /// Call from Program.cs finally block so nothing is lost on exit.</summary>
+    public static void Flush()
+    {
+        DrainQueue();
+    }
 
     /// <summary>Marks a clear session boundary at process start.</summary>
     public static void SessionStart(string version)
@@ -81,11 +99,37 @@ public static class Log
 
         if (!_ready) return;
 
-        lock (_gate)
+        _queue.Enqueue(line + Environment.NewLine);
+    }
+
+    /// <summary>Background thread: wakes every 500ms and flushes queued lines to disk in one batch.</summary>
+    private static void FlushLoop()
+    {
+        while (true)
+        {
+            Thread.Sleep(500);
+            DrainQueue();
+        }
+    }
+
+    /// <summary>Dequeues all pending lines and writes them in a single File.AppendAllText call.</summary>
+    private static void DrainQueue()
+    {
+        if (_queue.IsEmpty) return;
+
+        var sb = new StringBuilder();
+        while (_queue.TryDequeue(out var line))
+        {
+            sb.Append(line);
+        }
+
+        if (sb.Length == 0) return;
+
+        lock (_flushGate)
         {
             try
             {
-                File.AppendAllText(_logFile, line + Environment.NewLine, Encoding.UTF8);
+                File.AppendAllText(_logFile, sb.ToString(), Encoding.UTF8);
             }
             catch
             {

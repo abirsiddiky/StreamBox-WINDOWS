@@ -17,14 +17,19 @@ public sealed class PlaylistService
     private const string ActivePlaylistIdKey = "active_playlist_id";
 
     private static readonly Regex AttributeRegex = new(@"(?<key>[\w-]+)=""(?<value>[^""]*)""", RegexOptions.Compiled);
+    private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     private readonly HttpClient _httpClient;
     private readonly DatabaseService _databaseService;
+    private readonly StalkerService _stalkerService;
+    private readonly XtreamClient _xtreamClient;
 
-    public PlaylistService(HttpClient httpClient, DatabaseService databaseService)
+    public PlaylistService(HttpClient httpClient, DatabaseService databaseService, StalkerService stalkerService, XtreamClient xtreamClient)
     {
         _httpClient = httpClient;
         _databaseService = databaseService;
+        _stalkerService = stalkerService;
+        _xtreamClient = xtreamClient;
     }
 
     // ── Playlist CRUD ──
@@ -94,6 +99,18 @@ public sealed class PlaylistService
             return Array.Empty<Channel>();
         }
 
+        // Stalker playlists use a completely different protocol — handle separately.
+        if (playlist.SourceKind == "Stalker")
+        {
+            return await RefreshStalkerPlaylistAsync(playlistId, playlist, cancellationToken);
+        }
+
+        // Xtream playlists use the Player API — handle separately.
+        if (playlist.SourceKind == "Xtream")
+        {
+            return await RefreshXtreamPlaylistAsync(playlistId, playlist, cancellationToken);
+        }
+
         var source = ResolveSource(playlist);
         string m3uText;
         try
@@ -115,6 +132,165 @@ public sealed class PlaylistService
         await _databaseService.SavePlaylistChannelsAsync(playlistId, channels, cancellationToken);
         Log.Info($"Playlist '{playlist.Name}' refreshed: {channels.Count} channels");
         return channels;
+    }
+
+    private async Task<IReadOnlyList<Channel>> RefreshStalkerPlaylistAsync(
+        long playlistId, Playlist playlist, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(playlist.SourceValue))
+        {
+            Log.Warn($"Stalker playlist '{playlist.Name}' has no source value");
+            return Array.Empty<Channel>();
+        }
+
+        StalkerCreds creds;
+        try
+        {
+            creds = JsonSerializer.Deserialize<StalkerCreds>(playlist.SourceValue, JsonOpts) ?? throw new JsonException("null");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Failed to parse Stalker credentials for '{playlist.Name}': {ex.Message}");
+            return Array.Empty<Channel>();
+        }
+
+        var portal = creds.Portal?.TrimEnd('/') ?? "";
+        var mac = creds.Mac ?? "";
+        if (string.IsNullOrWhiteSpace(portal) || string.IsNullOrWhiteSpace(mac))
+        {
+            Log.Warn($"Stalker playlist '{playlist.Name}' has missing portal or mac");
+            return Array.Empty<Channel>();
+        }
+
+        try
+        {
+            var token = await _stalkerService.HandshakeAsync(portal, mac, cancellationToken);
+
+            // Fetch genres for GroupTitle mapping
+            var genreMap = new Dictionary<string, string>();
+            try
+            {
+                var genres = await _stalkerService.GetGenresAsync(portal, mac, token, cancellationToken);
+                foreach (var (id, title) in genres)
+                    genreMap[id] = title;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Stalker GetGenres failed (non-fatal): {ex.Message}");
+            }
+
+            var stalkerChannels = await _stalkerService.GetChannelsAsync(portal, mac, token, cancellationToken);
+
+            var channels = new List<Channel>();
+            for (var i = 0; i < stalkerChannels.Count; i++)
+            {
+                var sc = stalkerChannels[i];
+                channels.Add(new Channel
+                {
+                    Name = sc.Name,
+                    GroupTitle = genreMap.TryGetValue(sc.GenreId, out var genreTitle) ? genreTitle : "Stalker",
+                    LogoUrl = sc.Logo,
+                    StreamUrl = "", // resolved at play time, not stored
+                    StalkerCmd = sc.Cmd,
+                    StalkerPortalUrl = portal,
+                    StalkerMac = mac,
+                    SortOrder = i,
+                    PlaylistId = playlistId
+                });
+            }
+
+            await _databaseService.SavePlaylistChannelsAsync(playlistId, channels, cancellationToken);
+            Log.Info($"Stalker playlist '{playlist.Name}' refreshed: {channels.Count} channels");
+            return channels;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Failed to fetch Stalker playlist '{playlist.Name}': {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<IReadOnlyList<Channel>> RefreshXtreamPlaylistAsync(
+        long playlistId, Playlist playlist, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(playlist.SourceValue))
+        {
+            Log.Warn($"[Xtream] Playlist '{playlist.Name}' has no source value");
+            return await LoadCachedOrEmpty(playlistId, cancellationToken);
+        }
+
+        XtreamCreds creds;
+        try
+        {
+            creds = JsonSerializer.Deserialize<XtreamCreds>(playlist.SourceValue, JsonOpts)
+                     ?? throw new JsonException("null");
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[Xtream] Failed to parse credentials for '{playlist.Name}': {ex.Message}");
+            return await LoadCachedOrEmpty(playlistId, cancellationToken);
+        }
+
+        var server = creds.Server?.Trim().Trim('`', '\'', '"') ?? "";
+        var username = creds.Username ?? "";
+        var password = creds.Password ?? "";
+
+        if (string.IsNullOrWhiteSpace(server) || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            Log.Warn($"[Xtream] Playlist '{playlist.Name}' has incomplete credentials");
+            return await LoadCachedOrEmpty(playlistId, cancellationToken);
+        }
+
+        try
+        {
+            var result = await _xtreamClient.RefreshAsync(server, username, password, playlistId, cancellationToken);
+
+            if (result.Channels is null)
+            {
+                // Authentication or API failure — keep cached channels
+                Log.Warn($"[Xtream] Refresh failed for '{playlist.Name}': [{result.ErrorCode}] {result.ErrorMessage}");
+                return await LoadCachedOrEmpty(playlistId, cancellationToken);
+            }
+
+            if (result.Channels.Count == 0)
+            {
+                // Server genuinely has zero channels — don't overwrite cached
+                Log.Warn($"[Xtream] Server returned 0 channels for '{playlist.Name}', keeping cached channels");
+                return await LoadCachedOrEmpty(playlistId, cancellationToken);
+            }
+
+            // Success — save and return
+            await _databaseService.SavePlaylistChannelsAsync(playlistId, result.Channels, cancellationToken);
+            Log.Info($"[Xtream] Playlist '{playlist.Name}' refreshed: {result.Channels.Count} channels");
+            return result.Channels;
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"[Xtream] Unexpected error refreshing '{playlist.Name}': {ex.Message}");
+            return await LoadCachedOrEmpty(playlistId, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Returns cached channels if any exist, otherwise empty list.
+    /// Used to avoid overwriting valid cached data on refresh failure.
+    /// </summary>
+    private async Task<IReadOnlyList<Channel>> LoadCachedOrEmpty(long playlistId, CancellationToken ct)
+    {
+        try
+        {
+            var cached = await _databaseService.LoadPlaylistChannelsAsync(playlistId, ct);
+            if (cached.Count > 0)
+            {
+                Log.Info($"[Xtream] Using {cached.Count} cached channels");
+                return cached;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[Xtream] Failed to load cached channels: {ex.Message}");
+        }
+        return Array.Empty<Channel>();
     }
 
     // ── M3U Export ──
@@ -378,4 +554,17 @@ public sealed class PlaylistService
     }
 
     private sealed record PlaylistSource(PlaylistSourceKind Kind, string? Value);
+
+    private sealed record XtreamCreds
+    {
+        public string? Server { get; set; }
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+    }
+
+    private sealed record StalkerCreds
+    {
+        public string? Portal { get; set; }
+        public string? Mac { get; set; }
+    }
 }

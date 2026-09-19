@@ -116,6 +116,20 @@ if "!MPV_FOUND!"=="0" (
 echo   libmpv native DLL found.
 echo.
 
+rem ── Verify Redist files exist before building installer ──
+if not exist "Redist\vc_redist.x64.exe" (
+    echo ERROR: Redist\vc_redist.x64.exe not found.
+    echo   Download from https://aka.ms/vs/17/release/vc_redist.x64.exe
+    goto :fail
+)
+if not exist "Redist\VulkanRT-Installer.exe" (
+    echo ERROR: Redist\VulkanRT-Installer.exe not found.
+    echo   Download from https://vulkan.lunarg.com/sdk/home and rename to VulkanRT-Installer.exe
+    goto :fail
+)
+echo   Redist files found.
+echo.
+
 rem ── [9/9] Build installer with Inno Setup ──
 echo [9/9] Building installer...
 "!ISCC!" StreamBox.iss

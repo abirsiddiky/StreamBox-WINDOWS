@@ -49,6 +49,7 @@ internal static class Program
         }
         finally
         {
+            Log.Flush();
             try
             {
                 _singleInstanceMutex?.ReleaseMutex();

@@ -86,6 +86,9 @@ public sealed class DatabaseService
                 // Migrate existing databases: add playlist_id column if missing
                 await MigrateAddPlaylistIdAsync(connection, cancellationToken);
 
+                // Migrate existing databases: add Stalker columns if missing
+                await MigrateAddStalkerColumnsAsync(connection, cancellationToken);
+
                 // Migrate existing single-playlist data to playlists table
                 await MigrateExistingPlaylistAsync(connection, cancellationToken);
             });
@@ -125,6 +128,36 @@ public sealed class DatabaseService
             await using var alterCmd = connection.CreateCommand();
             alterCmd.CommandText = "ALTER TABLE channels ADD COLUMN playlist_id INTEGER NOT NULL DEFAULT 0;";
             await alterCmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static async Task MigrateAddStalkerColumnsAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        var columns = new[] { "stalker_cmd", "stalker_portal_url", "stalker_mac" };
+        foreach (var col in columns)
+        {
+            await using var checkCmd = connection.CreateCommand();
+            checkCmd.CommandText = "PRAGMA table_info(channels);";
+            var hasColumn = false;
+            await using (var reader = await checkCmd.ExecuteReaderAsync(ct))
+            {
+                while (await reader.ReadAsync(ct))
+                {
+                    if (reader.GetString(1) == col)
+                    {
+                        hasColumn = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasColumn)
+            {
+                Log.Info($"Migrating channels table: adding {col} column");
+                await using var alterCmd = connection.CreateCommand();
+                alterCmd.CommandText = $"ALTER TABLE channels ADD COLUMN {col} TEXT NULL;";
+                await alterCmd.ExecuteNonQueryAsync(ct);
+            }
         }
     }
 
@@ -215,7 +248,8 @@ public sealed class DatabaseService
             await using var command = connection.CreateCommand();
             command.CommandText =
                 """
-                SELECT id, name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id
+                SELECT id, name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id,
+                       stalker_cmd, stalker_portal_url, stalker_mac
                 FROM channels
                 ORDER BY sort_order, name;
                 """;
@@ -235,7 +269,10 @@ public sealed class DatabaseService
                         ? null
                         : JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(6)),
                     SortOrder = reader.GetInt32(7),
-                    PlaylistId = reader.GetInt64(8)
+                    PlaylistId = reader.GetInt64(8),
+                    StalkerCmd = reader.IsDBNull(9) ? null : reader.GetString(9),
+                    StalkerPortalUrl = reader.IsDBNull(10) ? null : reader.GetString(10),
+                    StalkerMac = reader.IsDBNull(11) ? null : reader.GetString(11)
                 });
             }
 
@@ -255,7 +292,8 @@ public sealed class DatabaseService
             await using var command = connection.CreateCommand();
             command.CommandText =
                 """
-                SELECT id, name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id
+                SELECT id, name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id,
+                       stalker_cmd, stalker_portal_url, stalker_mac
                 FROM channels
                 WHERE playlist_id = $playlistId
                 ORDER BY sort_order, name;
@@ -277,7 +315,10 @@ public sealed class DatabaseService
                         ? null
                         : JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(6)),
                     SortOrder = reader.GetInt32(7),
-                    PlaylistId = reader.GetInt64(8)
+                    PlaylistId = reader.GetInt64(8),
+                    StalkerCmd = reader.IsDBNull(9) ? null : reader.GetString(9),
+                    StalkerPortalUrl = reader.IsDBNull(10) ? null : reader.GetString(10),
+                    StalkerMac = reader.IsDBNull(11) ? null : reader.GetString(11)
                 });
             }
 
@@ -314,9 +355,11 @@ public sealed class DatabaseService
                 insertCommand.CommandText =
                     """
                     INSERT INTO channels
-                    (name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id)
+                    (name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id,
+                     stalker_cmd, stalker_portal_url, stalker_mac)
                     VALUES
-                    ($name, $group, $logo, $stream, $userAgent, $headers, $sortOrder, $playlistId);
+                    ($name, $group, $logo, $stream, $userAgent, $headers, $sortOrder, $playlistId,
+                     $stalkerCmd, $stalkerPortalUrl, $stalkerMac);
                     """;
                 insertCommand.Parameters.AddWithValue("$name", channel.Name);
                 insertCommand.Parameters.AddWithValue("$group", channel.GroupTitle);
@@ -330,6 +373,9 @@ public sealed class DatabaseService
                         : DBNull.Value);
                 insertCommand.Parameters.AddWithValue("$sortOrder", i);
                 insertCommand.Parameters.AddWithValue("$playlistId", playlistId);
+                insertCommand.Parameters.AddWithValue("$stalkerCmd", (object?)channel.StalkerCmd ?? DBNull.Value);
+                insertCommand.Parameters.AddWithValue("$stalkerPortalUrl", (object?)channel.StalkerPortalUrl ?? DBNull.Value);
+                insertCommand.Parameters.AddWithValue("$stalkerMac", (object?)channel.StalkerMac ?? DBNull.Value);
                 await insertCommand.ExecuteNonQueryAsync(cancellationToken);
             }
 
@@ -365,9 +411,11 @@ public sealed class DatabaseService
                 insertCommand.CommandText =
                     """
                     INSERT INTO channels
-                    (name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id)
+                    (name, group_title, logo_url, stream_url, user_agent, extra_headers_json, sort_order, playlist_id,
+                     stalker_cmd, stalker_portal_url, stalker_mac)
                     VALUES
-                    ($name, $group, $logo, $stream, $userAgent, $headers, $sortOrder, $playlistId);
+                    ($name, $group, $logo, $stream, $userAgent, $headers, $sortOrder, $playlistId,
+                     $stalkerCmd, $stalkerPortalUrl, $stalkerMac);
                     """;
                 insertCommand.Parameters.AddWithValue("$name", channel.Name);
                 insertCommand.Parameters.AddWithValue("$group", channel.GroupTitle);
@@ -381,6 +429,9 @@ public sealed class DatabaseService
                         : DBNull.Value);
                 insertCommand.Parameters.AddWithValue("$sortOrder", i);
                 insertCommand.Parameters.AddWithValue("$playlistId", channel.PlaylistId);
+                insertCommand.Parameters.AddWithValue("$stalkerCmd", (object?)channel.StalkerCmd ?? DBNull.Value);
+                insertCommand.Parameters.AddWithValue("$stalkerPortalUrl", (object?)channel.StalkerPortalUrl ?? DBNull.Value);
+                insertCommand.Parameters.AddWithValue("$stalkerMac", (object?)channel.StalkerMac ?? DBNull.Value);
                 await insertCommand.ExecuteNonQueryAsync(cancellationToken);
             }
 

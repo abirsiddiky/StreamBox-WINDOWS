@@ -11,17 +11,26 @@ public sealed class PlayerService : IDisposable
     private long _generation;
     private long _mpvGeneration;
     private readonly SemaphoreSlim _switchGuard = new(1, 1);
+    private readonly StalkerService _stalkerService;
     private MpvClient? _mpv;
     private CancellationTokenSource? _bufferingCts;
     private Channel? _currentChannel;
     private Func<nint>? _hostHandleFactory;
     private nint _hostHandle;
     private bool _disposed;
+    private int _reconnectAttempt;
+    private bool _playedSuccessfullyThisSession;
+    private const int MaxSilentReconnectAttempts = 3;
 
     public event EventHandler<PlayerStateChanged>? StateChanged;
 
     public Channel? CurrentChannel => _currentChannel;
     public bool IsPlaying { get; private set; }
+
+    public PlayerService(StalkerService stalkerService)
+    {
+        _stalkerService = stalkerService;
+    }
 
     /// <summary>
     /// Set a factory that creates/returns the video host HWND on demand.
@@ -42,9 +51,14 @@ public sealed class PlayerService : IDisposable
         return _hostHandle;
     }
 
-    public async Task PlayChannelAsync(Channel channel, CancellationToken cancellationToken = default)
+    public async Task PlayChannelAsync(Channel channel, CancellationToken cancellationToken = default, bool isReconnectAttempt = false)
     {
         if (_disposed) return;
+
+        // Fresh channel selection resets the retry budget; a silent reconnect must NOT.
+        if (!isReconnectAttempt)
+            _reconnectAttempt = 0;
+        _playedSuccessfullyThisSession = false;
 
         // Lazily create the HWND on first channel play (not at startup)
         var handle = EnsureHostHandle();
@@ -143,7 +157,29 @@ public sealed class PlayerService : IDisposable
             Log.Info($"Loading stream for '{channel.Name}' [gen={gen}]");
             try
             {
-                _mpv.LoadFile(channel.StreamUrl);
+                var streamUrl = channel.StreamUrl;
+
+                // Stalker channels: resolve a fresh playable URL right before playback.
+                if (!string.IsNullOrEmpty(channel.StalkerCmd) &&
+                    !string.IsNullOrEmpty(channel.StalkerPortalUrl) &&
+                    !string.IsNullOrEmpty(channel.StalkerMac))
+                {
+                    try
+                    {
+                        Log.Info($"Resolving Stalker link for '{channel.Name}' [gen={gen}]");
+                        var token = await _stalkerService.HandshakeAsync(channel.StalkerPortalUrl, channel.StalkerMac, cancellationToken);
+                        streamUrl = await _stalkerService.CreateLinkAsync(channel.StalkerPortalUrl, channel.StalkerMac, token, channel.StalkerCmd, cancellationToken);
+                        Log.Info($"Stalker link resolved [gen={gen}]");
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"Stalker link resolution failed [gen={gen}]: {ex.Message}");
+                        // Fall through — mpv will attempt the original streamUrl (likely empty),
+                        // which will trigger the normal buffering-timeout / error path.
+                    }
+                }
+
+                _mpv.LoadFile(streamUrl);
             }
             catch (Exception ex)
             {
@@ -225,6 +261,8 @@ public sealed class PlayerService : IDisposable
                     if (Volatile.Read(ref _mpvGeneration) != Volatile.Read(ref _generation)) return;
                     CancelBufferingTimeout();
                     IsPlaying = true;
+                    _playedSuccessfullyThisSession = true;
+                    _reconnectAttempt = 0;
                     Log.Info($"File loaded [gen={mpvGen}]");
                     StateChanged?.Invoke(this, new PlayerStateChanged(mpvGen, PlayerState.Playing));
                     break;
@@ -239,11 +277,39 @@ public sealed class PlayerService : IDisposable
                     if (reasonCode == 4) // Error — stream failed to open/play
                     {
                         if (Volatile.Read(ref _mpvGeneration) != Volatile.Read(ref _generation)) return;
+
+                        // Silent auto-reconnect: if the stream was previously healthy and we
+                        // haven't exhausted retries, attempt a silent reconnect with backoff
+                        // instead of immediately showing "Stream Unavailable".
+                        if (_playedSuccessfullyThisSession && _reconnectAttempt < MaxSilentReconnectAttempts)
+                        {
+                            _reconnectAttempt++;
+                            var delayMs = 2000 * (1 << (_reconnectAttempt - 1)); // 2s, 4s, 8s
+                            var channel = _currentChannel;
+                            var failureGen = mpvGen;
+
+                            IsPlaying = false;
+                            Log.Warn($"Mid-playback drop (code={errorCode}) [gen={mpvGen}] — silent reconnect attempt {_reconnectAttempt}/{MaxSilentReconnectAttempts} in {delayMs}ms");
+
+                            _ = Task.Run(async () =>
+                            {
+                                await Task.Delay(delayMs);
+
+                                // Abort if user switched channels or app is disposing.
+                                if (Volatile.Read(ref _generation) != failureGen) return;
+                                if (_disposed) return;
+                                if (channel is null) return;
+
+                                Log.Info($"Silent reconnect firing [gen={failureGen}] attempt={_reconnectAttempt}");
+                                await PlayChannelAsync(channel, isReconnectAttempt: true);
+                            });
+
+                            return;
+                        }
+
+                        // Initial connection failure or retries exhausted — show error to user.
                         Log.Warn($"EndFile with error (code={errorCode}) [gen={mpvGen}] — stream unavailable");
                         IsPlaying = false;
-                        // Fire Error state so the UI shows "Stream Unavailable".
-                        // Do NOT call SelfHeal here — self-healing is for mpv crashes,
-                        // not for failed streams. The user can retry via the Retry button.
                         StateChanged?.Invoke(this, new PlayerStateChanged(mpvGen, PlayerState.Error));
                     }
                     else

@@ -13,4 +13,7 @@ public sealed class Channel
     public Dictionary<string, string>? ExtraHeaders { get; set; }
     public int SortOrder { get; set; }
     public long PlaylistId { get; set; }
+    public string? StalkerCmd { get; set; }
+    public string? StalkerPortalUrl { get; set; }
+    public string? StalkerMac { get; set; }
 }

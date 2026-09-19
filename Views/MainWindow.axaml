@@ -353,7 +353,7 @@
                 ZIndex="100">
             <Border Background="#2a2a2a" CornerRadius="0"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Width="400" Padding="20"
+                    Width="420" Padding="20"
                     BorderBrush="#3a3a3a" BorderThickness="1">
                 <StackPanel Spacing="12">
                     <TextBlock Text="Add Playlist" FontSize="14" FontWeight="Normal"
@@ -364,18 +364,35 @@
                                  Text="{Binding AddPlaylistName}"
                                  Classes="dinp" />
                     </StackPanel>
-                    <CheckBox Content="Load from local file"
-                              IsChecked="{Binding AddPlaylistFromFile}"
-                              Foreground="#808080" FontSize="11" />
+
+                    <!-- Mode tabs: URL | File | Xtream | Stalker -->
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button Content="URL" Classes="ptab"
+                                Tag="Url"
+                                Click="AddPlaylistMode_Click" />
+                        <Button Content="File" Classes="ptab"
+                                Tag="File"
+                                Click="AddPlaylistMode_Click" />
+                        <Button Content="Xtream" Classes="ptab"
+                                Tag="Xtream"
+                                Click="AddPlaylistMode_Click" />
+                        <Button Content="Stalker" Classes="ptab"
+                                Tag="Stalker"
+                                Click="AddPlaylistMode_Click" />
+                    </StackPanel>
+
+                    <!-- URL mode -->
                     <StackPanel Spacing="3"
-                                IsVisible="{Binding !AddPlaylistFromFile}">
+                                IsVisible="{Binding IsUrlMode}">
                         <TextBlock Text="M3U URL" FontSize="11" Foreground="#808080" />
                         <TextBox Watermark="https://example.com/playlist.m3u"
                                  Text="{Binding AddPlaylistUrl}"
                                  Classes="dinp" />
                     </StackPanel>
+
+                    <!-- File mode -->
                     <StackPanel Spacing="3"
-                                IsVisible="{Binding AddPlaylistFromFile}">
+                                IsVisible="{Binding IsFileMode}">
                         <TextBlock Text="File path" FontSize="11" Foreground="#808080" />
                         <Grid ColumnDefinitions="*,Auto">
                             <TextBox Grid.Column="0"
@@ -388,6 +405,47 @@
                                     Classes="dlg-sec" Padding="10,6" />
                         </Grid>
                     </StackPanel>
+
+                    <!-- Xtream mode -->
+                    <StackPanel Spacing="6"
+                                IsVisible="{Binding IsXtreamMode}">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Server" FontSize="11" Foreground="#808080" />
+                            <TextBox Watermark="http://example.com:8080"
+                                     Text="{Binding AddXtreamServer}"
+                                     Classes="dinp" />
+                        </StackPanel>
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Username" FontSize="11" Foreground="#808080" />
+                            <TextBox Watermark="username"
+                                     Text="{Binding AddXtreamUsername}"
+                                     Classes="dinp" />
+                        </StackPanel>
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Password" FontSize="11" Foreground="#808080" />
+                            <TextBox Watermark="password"
+                                     Text="{Binding AddXtreamPassword}"
+                                     Classes="dinp" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Stalker mode -->
+                    <StackPanel Spacing="6"
+                                IsVisible="{Binding IsStalkerMode}">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Portal URL" FontSize="11" Foreground="#808080" />
+                            <TextBox Watermark="http://portal.example.com"
+                                     Text="{Binding AddStalkerPortal}"
+                                     Classes="dinp" />
+                        </StackPanel>
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="MAC Address" FontSize="11" Foreground="#808080" />
+                            <TextBox Watermark="00:1A:79:XX:XX:XX"
+                                     Text="{Binding AddStalkerMac}"
+                                     Classes="dinp" />
+                        </StackPanel>
+                    </StackPanel>
+
                     <Border Height="1" Background="#3a3a3a" />
                     <StackPanel Orientation="Horizontal" Spacing="6"
                                 HorizontalAlignment="Right">

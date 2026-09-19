@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -47,6 +48,30 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _addPlaylistName = string.Empty;
     [ObservableProperty] private string _addPlaylistUrl = string.Empty;
     [ObservableProperty] private bool _addPlaylistFromFile;
+    [ObservableProperty] private string _addPlaylistMode = "Url"; // "Url" | "File" | "Xtream" | "Stalker"
+
+    // Computed visibility helpers for AXAML binding
+    public bool IsUrlMode => AddPlaylistMode == "Url";
+    public bool IsFileMode => AddPlaylistMode == "File";
+    public bool IsXtreamMode => AddPlaylistMode == "Xtream";
+    public bool IsStalkerMode => AddPlaylistMode == "Stalker";
+
+    partial void OnAddPlaylistModeChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsUrlMode));
+        OnPropertyChanged(nameof(IsFileMode));
+        OnPropertyChanged(nameof(IsXtreamMode));
+        OnPropertyChanged(nameof(IsStalkerMode));
+    }
+
+    // ── Xtream fields ──
+    [ObservableProperty] private string _addXtreamServer = string.Empty;
+    [ObservableProperty] private string _addXtreamUsername = string.Empty;
+    [ObservableProperty] private string _addXtreamPassword = string.Empty;
+
+    // ── Stalker fields ──
+    [ObservableProperty] private string _addStalkerPortal = string.Empty;
+    [ObservableProperty] private string _addStalkerMac = string.Empty;
 
     // ── Rename Playlist Dialog ──
 
@@ -200,6 +225,12 @@ public partial class MainViewModel : ObservableObject
         AddPlaylistName = string.Empty;
         AddPlaylistUrl = string.Empty;
         AddPlaylistFromFile = false;
+        AddPlaylistMode = "Url";
+        AddXtreamServer = string.Empty;
+        AddXtreamUsername = string.Empty;
+        AddXtreamPassword = string.Empty;
+        AddStalkerPortal = string.Empty;
+        AddStalkerMac = string.Empty;
         IsAddPlaylistOpen = true;
     }
 
@@ -226,24 +257,66 @@ public partial class MainViewModel : ObservableObject
             string sourceKind;
             string? sourceValue;
 
-            if (AddPlaylistFromFile)
+            switch (AddPlaylistMode)
             {
-                sourceKind = "CustomFile";
-                sourceValue = AddPlaylistUrl; // File path from code-behind file picker
-            }
-            else
-            {
-                var url = AddPlaylistUrl.Trim();
-                if (string.IsNullOrWhiteSpace(url))
-                {
-                    sourceKind = "Default";
-                    sourceValue = null;
-                }
-                else
-                {
-                    sourceKind = "CustomUrl";
-                    sourceValue = url;
-                }
+                case "Xtream":
+                    var server = AddXtreamServer.Trim().Trim('`', '\'', '"', ' ');
+                    var username = AddXtreamUsername.Trim();
+                    var password = AddXtreamPassword.Trim();
+                    if (string.IsNullOrWhiteSpace(server) || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+                    {
+                        StatusMessage = "Server, username, and password are required for Xtream";
+                        IsAddPlaylistOpen = true;
+                        return;
+                    }
+                    // Normalize server: add scheme if missing, strip trailing slash
+                    if (!server.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                        !server.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        server = "http://" + server;
+                    }
+                    server = server.TrimEnd('/');
+                    sourceKind = "Xtream";
+                    sourceValue = JsonSerializer.Serialize(new { server, username, password });
+                    break;
+
+                case "Stalker":
+                    var portal = AddStalkerPortal.Trim().Trim('`', '\'', '"', ' ');
+                    var mac = AddStalkerMac.Trim();
+                    if (string.IsNullOrWhiteSpace(portal) || string.IsNullOrWhiteSpace(mac))
+                    {
+                        StatusMessage = "Portal URL and MAC address are required for Stalker";
+                        IsAddPlaylistOpen = true;
+                        return;
+                    }
+                    if (!portal.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                        !portal.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        portal = "http://" + portal;
+                    }
+                    portal = portal.TrimEnd('/');
+                    sourceKind = "Stalker";
+                    sourceValue = JsonSerializer.Serialize(new { portal, mac });
+                    break;
+
+                case "File":
+                    sourceKind = "CustomFile";
+                    sourceValue = AddPlaylistUrl;
+                    break;
+
+                default: // "Url"
+                    var url = AddPlaylistUrl.Trim();
+                    if (string.IsNullOrWhiteSpace(url))
+                    {
+                        sourceKind = "Default";
+                        sourceValue = null;
+                    }
+                    else
+                    {
+                        sourceKind = "CustomUrl";
+                        sourceValue = url;
+                    }
+                    break;
             }
 
             var newId = await _playlistService.AddPlaylistAsync(name, sourceKind, sourceValue);

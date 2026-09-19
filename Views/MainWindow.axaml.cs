@@ -24,6 +24,7 @@ public partial class MainWindow : Window
 
     private nint _videoHwnd = nint.Zero;
     private MainViewModel? _vm;
+    private RECT _lastVideoRect;
 
     public MainWindow()
     {
@@ -57,9 +58,13 @@ public partial class MainWindow : Window
             // Exit fullscreen: restore sidebar column width
             if (sidebarColumn is not null)
             {
+#if DEBUG
                 Log.Info($"[DIAG] ToggleFullscreen EXIT: sidebarColumn.Width before={sidebarColumn.Width}");
+#endif
                 sidebarColumn.Width = new GridLength(330);
+#if DEBUG
                 Log.Info($"[DIAG] ToggleFullscreen EXIT: sidebarColumn.Width after={sidebarColumn.Width}");
+#endif
             }
             sidebar.IsVisible = true;
             WindowState = WindowState.Normal;
@@ -69,9 +74,13 @@ public partial class MainWindow : Window
             // Enter fullscreen: collapse sidebar column to 0
             if (sidebarColumn is not null)
             {
+#if DEBUG
                 Log.Info($"[DIAG] ToggleFullscreen ENTER: sidebarColumn.Width before={sidebarColumn.Width}");
+#endif
                 sidebarColumn.Width = new GridLength(0);
+#if DEBUG
                 Log.Info($"[DIAG] ToggleFullscreen ENTER: sidebarColumn.Width after={sidebarColumn.Width}");
+#endif
             }
             sidebar.IsVisible = false;
             WindowState = WindowState.FullScreen;
@@ -90,23 +99,24 @@ public partial class MainWindow : Window
 
         // Log window dimensions at open time
         var parentHwnd = this.TryGetPlatformHandle()?.Handle ?? nint.Zero;
+#if DEBUG
         if (parentHwnd != nint.Zero)
         {
             GetWindowRect(parentHwnd, out var winRect);
             GetClientRect(parentHwnd, out var cliRect);
             Log.Info($"[DIAG] Window opened — WindowRect: {winRect.Right - winRect.Left}x{winRect.Bottom - winRect.Top}, ClientRect: {cliRect.Right}x{cliRect.Bottom}, RenderScaling: {this.RenderScaling}");
         }
+#endif
 
-        // Log VideoAreaGrid bounds after first layout
+        // Reposition video HWND when VideoAreaGrid layout changes
         var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
         if (videoGrid is not null)
         {
+#if DEBUG
             Log.Info($"[DIAG] VideoAreaGrid at open — Bounds: {videoGrid.Bounds.Width}x{videoGrid.Bounds.Height}");
-            videoGrid.LayoutUpdated += (_, _) =>
-            {
-                Log.Info($"[DIAG] VideoAreaGrid LayoutUpdated — Bounds: {videoGrid.Bounds.Width}x{videoGrid.Bounds.Height}");
-                RepositionVideoHwnd();
-            };
+#endif
+            videoGrid.LayoutUpdated += (_, _) => RepositionVideoHwnd();
+#if DEBUG
             videoGrid.PropertyChanged += (_, args) =>
             {
                 if (args.Property.Name == "Bounds")
@@ -114,14 +124,17 @@ public partial class MainWindow : Window
                     Log.Info($"[DIAG] VideoAreaGrid Bounds changed — {videoGrid.Bounds.Width}x{videoGrid.Bounds.Height}");
                 }
             };
+#endif
         }
 
+#if DEBUG
         // Log sidebar dimensions
         var sidebar = this.FindControl<Border>("SidebarBorder");
         if (sidebar is not null)
         {
             Log.Info($"[DIAG] Sidebar at open — Width: {sidebar.Width}, Bounds: {sidebar.Bounds.Width}, IsVisible: {sidebar.IsVisible}");
         }
+#endif
 
         if (_vm is not null)
         {
@@ -133,7 +146,9 @@ public partial class MainWindow : Window
                 CreateVideoHwnd();
                 if (_videoHwnd != nint.Zero)
                 {
+#if DEBUG
                     Log.Info($"[DIAG] HWND factory called — _videoHwnd={_videoHwnd}");
+#endif
                     // Immediate reposition
                     Dispatcher.UIThread.Post(() => RepositionVideoHwnd(), DispatcherPriority.Loaded);
                 }
@@ -181,38 +196,36 @@ public partial class MainWindow : Window
 
     private void RepositionVideoHwnd()
     {
-        if (_videoHwnd == nint.Zero)
-        {
-            Log.Info("[DIAG] RepositionVideoHwnd: _videoHwnd is Zero — skipping");
-            return;
-        }
+        if (_videoHwnd == nint.Zero) return;
 
         // Use VideoAreaGrid.Bounds directly — it already accounts for the sidebar
         var videoGrid = this.FindControl<Grid>("VideoAreaGrid");
-        if (videoGrid is null)
-        {
-            Log.Info("[DIAG] RepositionVideoHwnd: videoGrid is null — skipping");
-            return;
-        }
+        if (videoGrid is null) return;
 
         var gridBounds = videoGrid.Bounds;
         var scale = this.RenderScaling;
         var videoW = (int)(gridBounds.Width * scale);
         var videoH = (int)(gridBounds.Height * scale);
 
+#if DEBUG
         Log.Info($"[DIAG] RepositionVideoHwnd: gridBounds={gridBounds.Width}x{gridBounds.Height}, scale={scale}, videoW={videoW}, videoH={videoH}");
+#endif
 
-        if (videoW <= 0 || videoH <= 0)
-        {
-            Log.Info("[DIAG] RepositionVideoHwnd: videoW or videoH <= 0 — skipping");
+        if (videoW <= 0 || videoH <= 0) return;
+
+        // Skip redundant MoveWindow if nothing has changed since last call
+        var desired = new RECT { Left = 0, Top = 0, Right = videoW, Bottom = videoH };
+        if (desired.Left == _lastVideoRect.Left && desired.Top == _lastVideoRect.Top &&
+            desired.Right == _lastVideoRect.Right && desired.Bottom == _lastVideoRect.Bottom)
             return;
-        }
 
+        _lastVideoRect = desired;
         MoveWindow(_videoHwnd, 0, 0, videoW, videoH, true);
 
-        // Verify after move
+#if DEBUG
         GetWindowRect(_videoHwnd, out var hwndRect);
         Log.Info($"[DIAG] After MoveWindow: HWND WindowRect = {hwndRect.Right - hwndRect.Left}x{hwndRect.Bottom - hwndRect.Top}");
+#endif
     }
 
     private void OnWindowResized(object? sender, WindowResizedEventArgs e)
@@ -323,8 +336,24 @@ public partial class MainWindow : Window
         _vm.AddPlaylistName = string.Empty;
         _vm.AddPlaylistUrl = string.Empty;
         _vm.AddPlaylistFromFile = false;
+        _vm.AddPlaylistMode = "Url";
+        _vm.AddXtreamServer = string.Empty;
+        _vm.AddXtreamUsername = string.Empty;
+        _vm.AddXtreamPassword = string.Empty;
+        _vm.AddStalkerPortal = string.Empty;
+        _vm.AddStalkerMac = string.Empty;
         if (_videoHwnd != nint.Zero) ShowWindow(_videoHwnd, SW_HIDE);
         AddPlaylistOverlay.IsVisible = true;
+    }
+
+    private void AddPlaylistMode_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string mode && _vm is not null)
+        {
+            _vm.AddPlaylistMode = mode;
+            // Keep AddPlaylistFromFile in sync for backward compat
+            _vm.AddPlaylistFromFile = mode == "File";
+        }
     }
 
     private void CancelAddPlaylist_Click(object? sender, RoutedEventArgs e)

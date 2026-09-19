@@ -48,6 +48,14 @@ public sealed class MpvClient : IDisposable
         // Works across Intel/AMD/NVIDIA without hardcoding a specific vendor.
         Check(Native.mpv_set_option_string(_handle, "hwdec", "auto-safe"), "set hwdec");
 
+    // Weak/virtualized GPU safety: mpv's default gpu vo uses shader-based
+    // high-quality scaling (spline/ewa scalers, debanding). With no real GPU,
+    // these run in software and are extremely CPU-heavy — this single line
+    // applies mpv's built-in "fast" profile (bilinear scaling, no deband,
+    // no interpolation) which cuts CPU load dramatically with negligible
+    // visible quality loss for live IPTV.
+    Check(Native.mpv_set_option_string(_handle, "profile", "fast"), "set profile fast");
+
         Check(Native.mpv_initialize(_handle), "initialize");
         Check(Native.mpv_observe_property(_handle, 1, "idle-active", MpvFormat.Flag), "observe idle-active");
 
@@ -59,7 +67,7 @@ public sealed class MpvClient : IDisposable
         _eventThread.Start();
     }
 
-    public static string DefaultUserAgent => "StreamBox/1.0 (Windows NT 10.0; Win64; x64) libmpv";
+    public static string DefaultUserAgent => "VLC/3.0.20 LibVLC/3.0.20";
 
     public void ApplyChannelHeaders(Channel channel)
     {
